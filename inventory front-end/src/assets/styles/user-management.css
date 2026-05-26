@@ -1,0 +1,61 @@
+.users-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.users-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.users-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.users-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.users-card :deep(.n-card__header) {
+  padding: 14px 16px;
+}
+
+.users-card :deep(.n-card__content) {
+  padding: 14px 16px 16px;
+}
+
+.users-filters {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.users-filters :deep(.n-form) {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.users-filters :deep(.n-form-item) {
+  margin-right: 12px;
+}
+
+.users-filters :deep(.n-form-item-label) {
+  color: #475569;
+  font-size: 13px;
+}
+
+.users-filters :deep(.n-input) {
+  width: 280px;
+}

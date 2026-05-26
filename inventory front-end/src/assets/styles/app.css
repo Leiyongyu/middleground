@@ -1,0 +1,6 @@
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}

@@ -1,0 +1,10 @@
+**/target/
+**/.idea/
+**/*.iml
+**/logs/
+**/*.log
+**/node_modules/
+**/dist/
+**/.vite/
+*.jar
+*.class
