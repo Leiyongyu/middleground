@@ -16,6 +16,7 @@ import {
 import { fetchInventoryOverview, fetchInventoryOverviewWarehouses } from '@/api/inventoryOverview'
 import { syncAll } from '@/api/sync'
 import { uploadProfitReport } from '@/api/profitReport'
+import { uploadPurchasePlan } from '@/api/purchasePlan'
 
 const message = useMessage()
 
@@ -99,18 +100,21 @@ const replenishColumns = [
     key: 'warehouseNames',
     width: 220,
     ellipsis: true,
+    fixed: 'left',
   },
   {
     title: 'sku',
     key: 'sku',
     width: 150,
     ellipsis: true,
+    fixed: 'left',
   },
   {
     title: '产品名称',
     key: 'productName',
     width: 180,
     ellipsis: true,
+    fixed: 'left',
   },
   {
     title: '近30利润',
@@ -225,7 +229,7 @@ const replenishColumns = [
     },
   },
   {
-    title: '历史1个月的最大月销',
+    title: '历史1个月最大月销',
     key: 'maxMonthlySales',
     width: 170,
     render: (row) =>
@@ -250,7 +254,7 @@ const replenishColumns = [
     render: (row) => renderRatioTag(row.totalInventoryRatio),
   },
   {
-    title: '最近成都仓出库的创建时间',
+    title: '最近成都仓出库创建时间',
     key: 'lastLocalOutboundTime',
     width: 200,
     ellipsis: true,
@@ -283,7 +287,7 @@ const replenishColumns = [
         : row.purchaseQuantity,
   },
   {
-    title: '最大月销的预估补货量',
+    title: '最大月销预估补货量',
     key: 'maxMonthlyReplenish',
     width: 180,
     render: (row) =>
@@ -410,6 +414,27 @@ async function handleUploadExcel() {
   input.click()
 }
 
+async function handleUploadPurchasePlan() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.xlsx,.xls'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    syncing.value = true
+    try {
+      const res = await uploadPurchasePlan(file)
+      const ppgSn = res?.ppgSn
+      message.success(`采购计划创建成功${ppgSn ? '，批次号: ' + ppgSn : ''}`)
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      syncing.value = false
+    }
+  }
+  input.click()
+}
+
 function handleReset() {
   filters.warehouseNames = []
   filters.sku = ''
@@ -448,6 +473,9 @@ function renderWarehouseOption({ node, option, selected }) {
           </NButton>
           <NButton size="small" type="info" :loading="syncing" @click="handleUploadExcel">
             上传利润报表
+          </NButton>
+          <NButton size="small" type="success" :loading="syncing" @click="handleUploadPurchasePlan">
+            上传采购计划
           </NButton>
         </NSpace>
       </template>

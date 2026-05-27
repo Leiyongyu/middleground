@@ -24,6 +24,8 @@ public class InventoryOverviewItem {
     private int overseasSellable;
     /** 海外总库存 = 海外可售 + 海外在途 */
     private int overseasTotal;
+    /** 采购待交付 */
+    private int purchasePendingDelivery;
     /** 成都在途（待到货量） */
     private int localOnway;
     /** 成都可售（可用量） */

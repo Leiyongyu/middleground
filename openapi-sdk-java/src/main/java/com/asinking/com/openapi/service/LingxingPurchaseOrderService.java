@@ -72,8 +72,6 @@ public class LingxingPurchaseOrderService {
                 e.setWareHouseName(str(order.get("ware_house_name")));
 
                 Map<String, Object> firstItem = items.get(0);
-                e.setItemWid(intVal(firstItem.get("wid")));
-                e.setItemWareHouseName(str(firstItem.get("ware_house_name")));
                 e.setItemSku(str(firstItem.get("sku")));
                 e.setItemProductName(str(firstItem.get("product_name")));
                 e.setItemProductId(intVal(firstItem.get("product_id")));

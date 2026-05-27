@@ -16,8 +16,6 @@ CREATE TABLE purchase_order (
     status_text VARCHAR(20) DEFAULT '' COMMENT '状态说明',
     wid INT DEFAULT 0 COMMENT '仓库id',
     ware_house_name VARCHAR(100) DEFAULT '' COMMENT '仓库名',
-    item_wid INT DEFAULT 0 COMMENT '子项仓库id',
-    item_ware_house_name VARCHAR(100) DEFAULT '' COMMENT '子项仓库名称',
     item_sku VARCHAR(200) DEFAULT '' COMMENT '子项SKU',
     item_product_name VARCHAR(200) DEFAULT '' COMMENT '子项品名',
     item_product_id INT DEFAULT 0 COMMENT '子项产品id',

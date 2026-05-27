@@ -23,8 +23,6 @@ public class PurchaseOrderEntity {
     @TableField("status_text") private String statusText;
     @TableField("wid") private Integer wid;
     @TableField("ware_house_name") private String wareHouseName;
-    @TableField("item_wid") private Integer itemWid;
-    @TableField("item_ware_house_name") private String itemWareHouseName;
     @TableField("item_sku") private String itemSku;
     @TableField("item_product_name") private String itemProductName;
     @TableField("item_product_id") private Integer itemProductId;

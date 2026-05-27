@@ -136,7 +136,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         //   - 入库时间：warehouse_statement.opt_time，限 type=22（采购入库），取同一key下最早的
         //
         // 匹配键 site|baseSku 的构建：
-        //   1. 从 purchase_order.item_ware_house_name 拿仓库名（如 "CTUeBay-DE中转仓"）
+        //   1. 从 purchase_order.ware_house_name 拿仓库名（如 "CTUeBay-DE中转仓"）
         //   2. whNameToSite() 把仓库名转为站点标签（如 contains("-DE") → "德国"）
         //   3. extractBaseSku() 从 SKU 提取基础码（如 "RNG-80210-0557" → "RNG-80210"）
         //   4. 拼成 key = "德国|RNG-80210"
@@ -145,7 +145,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         // 遍历 purchase_order 表，按 (site, baseSku) 聚合，同一 key 保留最新 order_time
         Map<String, LocalDate> orderTimeMap = new LinkedHashMap<>();
         for (PurchaseOrderEntity po : purchaseOrderMapper.selectList(null)) {
-            String sku = po.getItemSku(), whName = po.getItemWareHouseName();
+            String sku = po.getItemSku(), whName = po.getWareHouseName();
             // 三个必要条件：SKU不为空、仓库名不为空、下单时间不为空
             if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty() || po.getOrderTime() == null) continue;
             // 仓库名 → 站点标签（依赖 whNameToSite 的正确映射）
@@ -182,6 +182,18 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 purchaseCycleMap.put(k, (int) java.time.temporal.ChronoUnit.DAYS.between(od, ib));
         }
 
+        // ----- 5d. 采购待交付 = 按 (site, baseSku) 汇总 status_text IN (待审批,待下单) 的采购单数 -----
+        Map<String, Integer> purchasePendingMap = new LinkedHashMap<>();
+        for (PurchaseOrderEntity po : purchaseOrderMapper.selectList(null)) {
+            String statusText = po.getStatusText(), sku = po.getItemSku(), whName = po.getWareHouseName();
+            if (statusText == null || (!"待审批".equals(statusText) && !"待下单".equals(statusText))) continue;
+            if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty()) continue;
+            String site = whNameToSite(whName.trim());
+            if (site.isEmpty()) continue;
+            String key = site + "|" + extractBaseSku(sku.trim());
+            purchasePendingMap.merge(key, 1, Integer::sum);
+        }
+
         // ==== 6. 品牌归属 ====
         Map<String, String> ownerByBrand = brandOwnerService.list().stream().collect(Collectors.toMap(
                 e -> StringUtils.hasText(e.getBrandCode()) ? e.getBrandCode().trim().toUpperCase() : "",
@@ -209,17 +221,25 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 item.setLast30DaysProfit(m != null ? m.multiply(BigDecimal.valueOf(100)) : null);
 
                 String mid = extractMiddleCode(baseSku);
-                if (!mid.isEmpty() && !inv.siteLabel.isEmpty())
+                if (!mid.isEmpty() && !inv.siteLabel.isEmpty()) {
+                    String latestTime = null;
                     for (Map.Entry<Integer, String> e : widToSite.entrySet())
                         if (inv.siteLabel.equals(e.getValue())) {
                             String t = createTimeMap.get(mid + "|" + e.getKey());
-                            if (t != null) { item.setLastLocalOutboundTime(t); try { item.setOutboundDays((int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(t), LocalDate.now())); } catch (Exception ignored) {} }
-                            break;
+                            if (t != null && (latestTime == null || t.compareTo(latestTime) > 0))
+                                latestTime = t;
                         }
+                    if (latestTime != null) {
+                        item.setLastLocalOutboundTime(latestTime);
+                        try { item.setOutboundDays((int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.parse(latestTime), LocalDate.now())); } catch (Exception ignored) {}
+                    }
+                }
 
                 Integer pc = purchaseCycleMap.get(inv.siteLabel + "|" + baseSku);
                 if (pc != null) item.setPurchaseCycle(pc);
                 else LOG.info("采购周期未匹配: key={}|{} siteLabel={} baseSku={} mapSize={}", inv.siteLabel, baseSku, inv.siteLabel, baseSku, purchaseCycleMap.size());
+
+                item.setPurchasePendingDelivery(purchasePendingMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
 
                 item.setOverseasInStockRatio(divide(item.getOverseasSellable(), 1));
                 item.setOverseasTotalRatio(divide(item.getOverseasTotal(), 1));
