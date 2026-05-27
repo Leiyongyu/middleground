@@ -145,16 +145,6 @@
   font-size: 14px;
 }
 
-.demo-tip {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 20px;
-  padding-top: 18px;
-  border-top: 1px solid #e2e8f0;
-  color: #64748b;
-  font-size: 13px;
-}
-
 @media (max-width: 1024px) {
   .login-page {
     grid-template-columns: 1fr;

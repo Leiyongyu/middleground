@@ -2,8 +2,6 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 const STORAGE_KEY = 'inventory-auth-session'
-const DEMO_USERNAME = 'admin'
-const DEMO_PASSWORD = '123456'
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 function getStoredSession() {
@@ -176,8 +174,6 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     token,
     tokenType,
-    demoUsername: DEMO_USERNAME,
-    demoPassword: DEMO_PASSWORD,
     login,
     logout,
   }

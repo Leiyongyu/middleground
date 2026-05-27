@@ -4,7 +4,12 @@ import com.asinking.com.openapi.service.GoodcangClient;
 import com.asinking.com.openapi.service.GoodcangSyncService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -68,7 +73,7 @@ public class GoodcangCallbackController {
 
     /** 同步入库单数据 */
     /** 同步仓库信息 */
-    @RequestMapping(value = "/sync-warehouse", method = {RequestMethod.GET, RequestMethod.POST})
+    @PostMapping("/sync-warehouse")
     public Object syncWarehouse() throws Exception {
         return syncService.syncWarehouses();
     }

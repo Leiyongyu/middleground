@@ -141,12 +141,6 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         //   3. extractBaseSku() 从 SKU 提取基础码（如 "RNG-80210-0557" → "RNG-80210"）
         //   4. 拼成 key = "德国|RNG-80210"
         //
-        // 断点建议：
-        //   - 先看 whNameToSite("CTUeBay-DE中转仓") 是否返回 "德国"
-        //   - 再看 orderTimeMap 和 inboundTimeMap 是否都有 "德国|RNG-80210"
-        //   - 最后看 purchaseCycleMap.get("德国|RNG-80210") 是否有值
-        // ============================================================================
-
         // ----- 5a. 采购下单时间：从 purchase_order 取 -----
         // 遍历 purchase_order 表，按 (site, baseSku) 聚合，同一 key 保留最新 order_time
         Map<String, LocalDate> orderTimeMap = new LinkedHashMap<>();

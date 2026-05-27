@@ -2,8 +2,6 @@ package com.asinking.com.openapi.service;
 
 import com.alibaba.fastjson.JSON;
 import com.asinking.com.openapi.config.LingxingProperties;
-import com.asinking.com.openapi.entity.PlatformOrderDeliveryEntity;
-import com.asinking.com.openapi.mapper.mp.PlatformOrderDeliveryMapper;
 import com.asinking.com.openapi.sdk.core.*;
 import com.asinking.com.openapi.sdk.okhttp.HttpExecutor;
 import com.asinking.com.openapi.sdk.sign.ApiSign;
@@ -20,14 +18,11 @@ public class LingxingPlatformOrderService {
 
     private final LingxingProperties properties;
     private final LingxingAuthService authService;
-    private final PlatformOrderDeliveryMapper mapper;
 
     public LingxingPlatformOrderService(LingxingProperties properties,
-                                        LingxingAuthService authService,
-                                        PlatformOrderDeliveryMapper mapper) {
+                                        LingxingAuthService authService) {
         this.properties = properties;
         this.authService = authService;
-        this.mapper = mapper;
     }
 
     /** 测试：获取发货单列表 */

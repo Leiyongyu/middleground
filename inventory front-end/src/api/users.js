@@ -4,10 +4,6 @@ export function fetchUsersPage({ page, size, account, role }) {
   return apiGet('/api/users', { page, size, account, role })
 }
 
-export function fetchUserDetail(id) {
-  return apiGet(`/api/users/${id}`)
-}
-
 export function createUser(payload) {
   return apiPost('/api/users', payload)
 }

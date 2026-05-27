@@ -145,10 +145,6 @@ public class ProfitReportUploadController {
         }
     }
 
-    private String stringVal(Object v) {
-        return v != null ? String.valueOf(v).trim() : null;
-    }
-
     private int parseInt(String v) {
         if (v == null || v.isEmpty()) return 0;
         try { return (int) Double.parseDouble(v.replace(",", "")); } catch (Exception e) { return 0; }

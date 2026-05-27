@@ -126,39 +126,6 @@ function renderOwners(owners) {
   )
 }
 
-function renderManagedBrands(value) {
-  if (!value) {
-    return '-'
-  }
-
-  const raw = String(value)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-
-  if (raw.length === 0) {
-    return '-'
-  }
-
-  return h(
-    NSpace,
-    { size: 6, wrap: true },
-    {
-      default: () =>
-        raw.map((item) =>
-          h(
-            NTag,
-            {
-              size: 'small',
-              bordered: false,
-            },
-            { default: () => item },
-          ),
-        ),
-    },
-  )
-}
-
 async function loadUsers() {
   loading.value = true
 
