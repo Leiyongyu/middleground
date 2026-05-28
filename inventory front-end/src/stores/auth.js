@@ -66,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
   const tokenType = computed(() => (session.value ? session.value.tokenType : 'Bearer'))
   const isLoggedIn = computed(() => Boolean(token.value) && !isSessionExpired(session.value))
   const isAdmin = computed(() => normalizeRole(user.value?.role) === 'admin')
-  const ownerName = computed(() => session.value?.user?.ownerName || session.value?.user?.account || '')
+  const ownerName = computed(() => session.value?.user?.ownerName || '')
 
   async function login(account, password) {
     const payload = {

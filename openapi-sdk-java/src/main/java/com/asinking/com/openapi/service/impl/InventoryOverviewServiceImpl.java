@@ -253,7 +253,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
 
                 Integer pc = purchaseCycleMap.get(inv.siteLabel + "|" + baseSku);
                 if (pc != null) item.setPurchaseCycle(pc);
-                else LOG.info("采购周期未匹配: key={}|{} siteLabel={} baseSku={} mapSize={}", inv.siteLabel, baseSku, inv.siteLabel, baseSku, purchaseCycleMap.size());
+                else LOG.debug("采购周期未匹配: key={}|{} siteLabel={} baseSku={} mapSize={}", inv.siteLabel, baseSku, inv.siteLabel, baseSku, purchaseCycleMap.size());
 
                 item.setPurchasePendingDelivery(purchasePendingMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
 

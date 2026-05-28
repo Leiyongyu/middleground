@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, onMounted, ref } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NButton,
@@ -174,10 +174,10 @@ const columns = [
   {
     title: 'SKU',
     key: 'sku',
-    width: 200,
     render: (row) =>
       h(NSelect, {
         value: row.sku,
+        size: 'small',
         clearable: true,
         filterable: true,
         options: skuOptions.value,
@@ -193,10 +193,10 @@ const columns = [
   {
     title: '店铺',
     key: 'sid',
-    width: 240,
     render: (row) =>
       h(NSelect, {
         value: row.sid,
+        size: 'small',
         clearable: true,
         filterable: true,
         options: storeOptions.value,
@@ -212,10 +212,10 @@ const columns = [
   {
     title: '供应商ID',
     key: 'supplier_id',
-    width: 130,
     render: (row) =>
       h(NInputNumber, {
         value: row.supplier_id,
+        size: 'small',
         min: 0,
         showButton: false,
         style: { width: '100%', minWidth: 0 },
@@ -227,10 +227,10 @@ const columns = [
   {
     title: 'FNSKU',
     key: 'fnsku',
-    width: 150,
     render: (row) =>
       h(NInput, {
         value: row.fnsku,
+        size: 'small',
         placeholder: 'FNSKU001',
         style: { width: '100%', minWidth: 0 },
         'onUpdate:value': (val) => {
@@ -241,10 +241,10 @@ const columns = [
   {
     title: '仓库',
     key: 'wid',
-    width: 220,
     render: (row) =>
       h(NSelect, {
         value: row.wid,
+        size: 'small',
         clearable: true,
         filterable: true,
         options: warehouseOptions.value,
@@ -260,10 +260,10 @@ const columns = [
   {
     title: '采购方ID',
     key: 'purchaser_id',
-    width: 130,
     render: (row) =>
       h(NInputNumber, {
         value: row.purchaser_id,
+        size: 'small',
         min: 0,
         showButton: false,
         style: { width: '100%', minWidth: 0 },
@@ -275,17 +275,16 @@ const columns = [
   {
     title: '采购员',
     key: 'purchaser_name',
-    width: 130,
     render: () =>
-      h(NInput, { value: auth.ownerName, disabled: true, style: { width: '100%', minWidth: 0 } }),
+      h(NInput, { value: auth.ownerName, size: 'small', disabled: true, style: { width: '100%', minWidth: 0 } }),
   },
   {
     title: '计划采购量',
     key: 'quantity_plan',
-    width: 150,
     render: (row) =>
       h(NInputNumber, {
         value: row.quantity_plan,
+        size: 'small',
         min: 1,
         placeholder: '100',
         style: { width: '100%', minWidth: 0 },
@@ -297,10 +296,10 @@ const columns = [
   {
     title: '期望到货时间',
     key: 'expect_arrive_time',
-    width: 170,
     render: (row) =>
       h(NDatePicker, {
         type: 'date',
+        size: 'small',
         locale: dateZhCN,
         valueFormat: 'yyyy-MM-dd',
         formattedValue: row.expect_arrive_time,
@@ -314,10 +313,10 @@ const columns = [
   {
     title: '产品备注',
     key: 'remark',
-    width: 240,
     render: (row) =>
       h(NInput, {
         value: row.remark,
+        size: 'small',
         placeholder: '备注',
         style: { width: '100%', minWidth: 0 },
         'onUpdate:value': (val) => {
@@ -328,10 +327,10 @@ const columns = [
   {
     title: '自动FNSKU',
     key: 'is_auto_fill_fnsku',
-    width: 120,
     render: (row) =>
       h(NSelect, {
         value: row.is_auto_fill_fnsku,
+        size: 'small',
         options: [
           { label: '否', value: 0 },
           { label: '是', value: 1 },
@@ -345,10 +344,10 @@ const columns = [
   {
     title: '自动填充店铺',
     key: 'is_auto_fill_store',
-    width: 140,
     render: (row) =>
       h(NSelect, {
         value: row.is_auto_fill_store,
+        size: 'small',
         options: [
           { label: '否', value: 0 },
           { label: '是', value: 1 },
@@ -363,7 +362,6 @@ const columns = [
     title: '操作',
     key: 'actions',
     width: 120,
-    fixed: 'right',
     render(row, index) {
       return h(NSpace, { size: 12, wrap: false }, {
         default: () => [
@@ -394,17 +392,10 @@ const columns = [
     },
   },
 ]
-
-const tableScrollX = computed(() =>
-  columns.reduce((sum, column) => {
-    const width = Number(column?.width)
-    return sum + (Number.isFinite(width) ? width : 120)
-  }, 0),
-)
 </script>
 
 <template>
-  <section class="json-workspace" style="padding: 20px; max-width: 1300px; margin: 0 auto">
+  <section class="json-workspace purchase-plan-workspace">
     <NCard title="创建采购计划" size="large">
       <template #header-extra>
         <NSpace>
@@ -422,7 +413,6 @@ const tableScrollX = computed(() =>
         :row-key="(_, i) => i"
         :pagination="{ pageSize: 20 }"
         :max-height="500"
-        :scroll-x="tableScrollX"
       />
     </NCard>
   </section>
@@ -431,9 +421,27 @@ const tableScrollX = computed(() =>
 <style scoped src="../assets/styles/dashboard-view.css"></style>
 
 <style scoped>
+.purchase-plan-workspace {
+  padding: 16px;
+  width: 100%;
+  min-width: 0;
+}
+
 .purchase-plan-table :deep(.n-data-table-td),
 .purchase-plan-table :deep(.n-data-table-th) {
   padding: 8px 10px;
+}
+
+.purchase-plan-table :deep(.n-data-table-table) {
+  table-layout: fixed;
+}
+
+.purchase-plan-table :deep(.n-data-table-th__title) {
+  white-space: nowrap;
+}
+
+.purchase-plan-table :deep(.n-data-table-td) {
+  font-size: 12px;
 }
 
 .purchase-plan-table :deep(.n-data-table-td .n-input),
