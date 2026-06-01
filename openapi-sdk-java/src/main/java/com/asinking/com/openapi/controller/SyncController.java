@@ -140,6 +140,12 @@ public class SyncController {
     }
 
     /** 同步采购计划：前一天 */
+    /** 全量刷新所有入库单详情（从本地 goodcang_grn_list 取单号，逐条拉谷仓详情） */
+    @PostMapping("/goodcang-grn-detail")
+    public Result<Object> syncGoodcangGrnDetail() throws Exception {
+        return Result.ok(goodcangSyncService.syncAllGrnDetails());
+    }
+
     @PostMapping("/purchase-plan")
     public Result<Object> syncPurchasePlan() throws Exception {
         LocalDate now = LocalDate.now();

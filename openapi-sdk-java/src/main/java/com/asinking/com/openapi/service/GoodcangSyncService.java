@@ -4,6 +4,8 @@ import com.asinking.com.openapi.dto.response.SaleStatSyncResponse;
 import com.asinking.com.openapi.entity.*;
 import com.asinking.com.openapi.mapper.mp.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +19,8 @@ import java.util.HashMap;
  */
 @Service
 public class GoodcangSyncService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(GoodcangSyncService.class);
 
     private final GoodcangClient client;
     private final GoodcangGrnListMapper grnListMapper;
@@ -77,28 +81,32 @@ public class GoodcangSyncService {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> detailData = (Map<String, Object>) detailResp.get("data");
                     if (detailData != null) {
+                        // 优先取 overseas_detail，其次 transfer_detail
                         @SuppressWarnings("unchecked")
-                        List<Map<String, Object>> transferList = (List<Map<String, Object>>) detailData.get("transfer_detail");
-                        if (transferList != null) {
+                        List<Map<String, Object>> items = (List<Map<String, Object>>) detailData.get("overseas_detail");
+                        if (items == null || items.isEmpty()) {
+                            items = (List<Map<String, Object>>) detailData.get("transfer_detail");
+                        }
+                        if (items != null && !items.isEmpty()) {
                             // 删除旧明细
                             grnDetailMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GoodcangGrnDetailEntity>()
                                     .eq(GoodcangGrnDetailEntity::getReceivingCode, code));
-                            for (Map<String, Object> td : transferList) {
+                            for (Map<String, Object> td : items) {
                                 GoodcangGrnDetailEntity de = new GoodcangGrnDetailEntity();
                                 de.setId(uuid32());
                                 de.setReceivingCode(code);
                                 de.setProductSku(str(td.get("product_sku")));
                                 de.setBoxNo(str(td.get("box_no")));
-                                de.setTransitPreCount(intVal(td.get("transit_pre_count")));
-                                de.setTransitReceivingCount(intVal(td.get("transit_receiving_count")));
+                                de.setTransitPreCount(intVal(td.get("overseas_pre_count")));
+                                de.setTransitReceivingCount(intVal(td.get("overseas_receiving_count")));
                                 de.setReferenceBoxNo(str(td.get("reference_box_no")));
                                 grnDetailMapper.insert(de);
                                 totalDetail++;
                             }
                         }
                     }
-                } catch (Exception ignored) {
-                    // 单条详情失败不影响整体
+                } catch (Exception e) {
+                    LOG.warn("入库单详情拉取失败 receivingCode={}: {}", code, e.getMessage());
                 }
             }
 
@@ -122,6 +130,49 @@ public class GoodcangSyncService {
         try { return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")); }
         catch (Exception e) { return null; }
     }
+    /** 全量更新所有入库单详情（从 goodcang_grn_list 取所有 receiving_code，逐条拉详情） */
+    @Transactional
+    public SaleStatSyncResponse syncAllGrnDetails() {
+        List<String> codes = grnListMapper.selectList(null).stream()
+                .map(GoodcangGrnListEntity::getReceivingCode)
+                .filter(c -> c != null && !c.isEmpty())
+                .distinct().collect(java.util.stream.Collectors.toList());
+
+        int total = 0;
+        for (String code : codes) {
+            try {
+                Map<String, Object> detailResp = client.getGrnDetail(code);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> detailData = (Map<String, Object>) detailResp.get("data");
+                if (detailData != null) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> items = (List<Map<String, Object>>) detailData.get("overseas_detail");
+                    if (items == null || items.isEmpty())
+                        items = (List<Map<String, Object>>) detailData.get("transfer_detail");
+                    if (items != null && !items.isEmpty()) {
+                        grnDetailMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<GoodcangGrnDetailEntity>()
+                                .eq(GoodcangGrnDetailEntity::getReceivingCode, code));
+                        for (Map<String, Object> td : items) {
+                            GoodcangGrnDetailEntity de = new GoodcangGrnDetailEntity();
+                            de.setId(uuid32());
+                            de.setReceivingCode(code);
+                            de.setProductSku(str(td.get("product_sku")));
+                            de.setBoxNo(str(td.get("box_no")));
+                            de.setTransitPreCount(intVal(td.get("overseas_pre_count")));
+                            de.setTransitReceivingCount(intVal(td.get("overseas_receiving_count")));
+                            de.setReferenceBoxNo(str(td.get("reference_box_no")));
+                            grnDetailMapper.insert(de);
+                            total++;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOG.warn("详情同步失败 receivingCode={}: {}", code, e.getMessage());
+            }
+        }
+        return new SaleStatSyncResponse(total, total, Collections.emptyList());
+    }
+
     /** 同步仓库信息，清空后全量重写并模糊匹配 wid */
     @Transactional
     public SaleStatSyncResponse syncWarehouses() throws Exception {

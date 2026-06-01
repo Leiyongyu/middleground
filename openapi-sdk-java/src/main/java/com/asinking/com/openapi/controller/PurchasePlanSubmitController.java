@@ -127,14 +127,21 @@ public class PurchasePlanSubmitController {
         return Result.ok(count);
     }
 
-    /** 导出当前筛选数据为 Excel */
+    /** 导出 Excel，可选 ids 参数导出指定记录，不传则导出全部 */
     @GetMapping("/export")
-    public void export(HttpServletRequest request, HttpServletResponse response) throws Exception {
+    public void export(@RequestParam(required = false) String ids,
+                       HttpServletRequest request, HttpServletResponse response) throws Exception {
         String account = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ACCOUNT));
         String role = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ROLE));
         String ownerName = resolveOwnerName(account);
 
-        List<PurchasePlanSubmitEntity> records = service.list();
+        List<PurchasePlanSubmitEntity> records;
+        if (ids != null && !ids.isEmpty()) {
+            List<String> idList = Arrays.asList(ids.split(","));
+            records = service.listByIds(idList);
+        } else {
+            records = service.list();
+        }
 
         // 权限过滤（管理员看全部，组长看组员，组员看自己）
         if (!"admin".equalsIgnoreCase(role != null ? role.trim() : "")) {

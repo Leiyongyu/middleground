@@ -35,7 +35,11 @@ function handleReset() {
 
 async function handleExport() {
   try {
-    await exportExcel()
+    // 有选中条目且不是全选 → 只导出选中；全选或未选 → 导出全部
+    const allSelected = checkedRowKeys.value.length > 0
+        && checkedRowKeys.value.length === records.value.length
+    const ids = (!allSelected && checkedRowKeys.value.length > 0) ? checkedRowKeys.value : null
+    await exportExcel(ids)
     message.success('导出成功')
   } catch (e) {
     message.error(e instanceof Error ? e.message : '导出失败')
@@ -284,6 +288,7 @@ onActivated(() => { checkPermission(); loadData() })
         :columns="columns"
         :data="records"
         :row-key="(row) => row.id"
+        v-model:checked-row-keys="checkedRowKeys"
         :scroll-x="1800"
         :pagination="{
           page: query.page,

@@ -213,9 +213,11 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             SkuSiteInv inv = sm.computeIfAbsent(label, k -> new SkuSiteInv(baseSku, label));
             int s = d.getProductValidNum() != null ? d.getProductValidNum() : 0;
             int o = d.getProductOnway() != null ? d.getProductOnway() : 0;
+            // 成都在途使用 quantity_receive 替代 product_onway
+            int qr = d.getQuantityReceive() != null ? d.getQuantityReceive().intValue() : 0;
             inv.lockNum += d.getProductLockNum() != null ? d.getProductLockNum() : 0;
             if (wh.getType() != null && wh.getType() == 3) { inv.overseasSellable += s; inv.overseasOnway += o; }
-            else { inv.localSellable += s; inv.localOnway += o; }
+            else { inv.localSellable += s; inv.localOnway += qr; }
         }
 
         // ==== 3. 谷仓出库时间（已消除 N+1：批量查 GRN list + warehouse）====

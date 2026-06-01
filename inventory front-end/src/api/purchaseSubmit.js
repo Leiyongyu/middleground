@@ -25,23 +25,23 @@ export function batchUpdateStatus(ids, status) {
   return apiPut('/api/purchase-plan-submit/batch-status', { ids, status })
 }
 
-/** 导出 Excel */
-export async function exportExcel() {
+/** 导出 Excel，传 ids 数组则只导出指定记录 */
+export async function exportExcel(ids) {
   let token = ''
   try {
     const session = JSON.parse(localStorage.getItem('inventory-auth-session'))
     token = session?.token || ''
   } catch { /* ignore */ }
   const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
-  const resp = await fetch(`${base}/api/purchase-plan-submit/export`, {
+  let url = `${base}/api/purchase-plan-submit/export`
+  if (ids && ids.length > 0) url += '?ids=' + ids.join(',')
+  const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!resp.ok) throw new Error('导出失败')
   const blob = await resp.blob()
-  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url
+  a.href = URL.createObjectURL(blob)
   a.download = '采购计划导出.xlsx'
   a.click()
-  URL.revokeObjectURL(url)
 }
