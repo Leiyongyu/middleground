@@ -312,4 +312,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         }
         return trimmed;
     }
+
+    @Override
+    public UserEntity getByAccount(String account) {
+        return lambdaQuery().eq(UserEntity::getAccount, account).one();
+    }
 }

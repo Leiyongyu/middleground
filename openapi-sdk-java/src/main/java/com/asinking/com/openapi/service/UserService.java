@@ -35,4 +35,7 @@ public interface UserService extends IService<UserEntity> {
 
     /** 分页查询用户（返回 UserResponse，含品牌归属信息）。 */
     PageResult<UserResponse> pageUserResponses(long page, long size, String account, String role);
+
+    /** 根据账号查询用户 */
+    UserEntity getByAccount(String account);
 }

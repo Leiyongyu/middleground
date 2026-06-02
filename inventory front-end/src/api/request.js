@@ -1,31 +1,15 @@
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
+import { httpRequest } from '@/api/httpClient'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
-
-function buildUrl(path, query) {
-  const url = API_BASE_URL ? new URL(`${API_BASE_URL}${path}`) : new URL(path, window.location.origin)
-
-  if (query) {
-    Object.entries(query).forEach(([key, value]) => {
-      if (value === undefined || value === null || value === '') {
-        return
-      }
-      url.searchParams.set(key, String(value))
-    })
-  }
-
-  return url.toString()
-}
-
+/**
+ * 带认证的 API 请求封装：自动附加 Bearer token，处理 401 跳转和统一错误。
+ */
 export async function apiRequest({ path, method = 'GET', query, body, auth = true }) {
-  const authStore = useAuthStore()
-  const requestMethod = method.toUpperCase()
-  const url = buildUrl(path, query)
   const headers = {}
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
 
   if (auth) {
+    const authStore = useAuthStore()
     const token = authStore.token
     const tokenType = authStore.tokenType || 'Bearer'
 
@@ -33,53 +17,31 @@ export async function apiRequest({ path, method = 'GET', query, body, auth = tru
       await router.push('/login')
       throw new Error('请先登录')
     }
-
     headers.Authorization = `${tokenType} ${token}`
   }
 
-  if (body !== undefined && !isFormData) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  const response = await fetch(url, {
-    method: requestMethod,
-    headers,
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
-  })
-
-  const responseText = await response.text()
-  let responseData = null
-
-  if (responseText) {
-    try {
-      responseData = JSON.parse(responseText)
-    } catch {
-      responseData = { message: responseText }
-    }
-  }
+  const { response, data } = await httpRequest({ path, method, query, body, headers })
 
   if (response.status === 401) {
+    const authStore = useAuthStore()
     await authStore.logout()
     await router.push('/login')
-    throw new Error(responseData?.message || '登录已失效，请重新登录')
+    throw new Error(data?.message || '登录已失效，请重新登录')
   }
 
   if (!response.ok) {
-    throw new Error(responseData?.message || `请求失败，状态码：${response.status}`)
+    throw new Error(data?.message || `请求失败，状态码：${response.status}`)
   }
 
-  if (responseData && typeof responseData === 'object' && 'code' in responseData) {
-    const codeValue = typeof responseData.code === 'number' ? responseData.code : Number(responseData.code)
-    const isSuccess = codeValue === 0 || codeValue === 200
-
-    if (!isSuccess) {
-      throw new Error(responseData.message || '请求失败')
+  if (data && typeof data === 'object' && 'code' in data) {
+    const codeValue = typeof data.code === 'number' ? data.code : Number(data.code)
+    if (codeValue !== 0 && codeValue !== 200) {
+      throw new Error(data.message || '请求失败')
     }
-
-    return responseData.data
+    return data.data
   }
 
-  return responseData
+  return data
 }
 
 export function apiGet(path, query, options) {

@@ -7,43 +7,34 @@ import {
 import { batchUpdateStatus, deleteSubmit, exportExcel, fetchSubmitPage, updateSubmit } from '@/api/purchaseSubmit'
 import { isLeader } from '@/api/team'
 import { useAuthStore } from '@/stores/auth'
+import { useDataTable } from '@/composables/useDataTable'
 
 const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 
-const loading = ref(false)
-const records = ref([])
-const total = ref(0)
 const checkedRowKeys = ref([])
 const canApprove = ref(false)
-
-const query = reactive({ page: 1, size: 10, sku: '', creator: '', status: '' })
 const activeStatus = ref('全部')
 
-function handleSearch() {
-  query.page = 1
-  loadData()
-}
-
-function handleReset() {
-  query.sku = ''
-  query.creator = ''
-  query.page = 1
-  loadData()
-}
+const { loading, records, total, query, filters, loadData, handleSearch, handleReset } = useDataTable(
+  fetchSubmitPage,
+  { sku: '', creator: '' },
+  { pageSize: 10 },
+)
 
 function handleStatusChange(value) {
   activeStatus.value = value
-  query.status = value === '全部' ? '' : value
+  filters.status = value === '全部' ? '' : value
   query.page = 1
   loadData()
 }
 
+onMounted(() => checkPermission())
+
 async function handleExport() {
   try {
-    // 有选中条目且不是全选 → 只导出选中；全选或未选 → 导出全部
     const allSelected = checkedRowKeys.value.length > 0
         && checkedRowKeys.value.length === records.value.length
     const ids = (!allSelected && checkedRowKeys.value.length > 0) ? checkedRowKeys.value : null
@@ -66,24 +57,6 @@ async function checkPermission() {
 function formatTime(v) {
   if (!v) return ''
   return String(v).replace('T', ' ').substring(0, 19)
-}
-
-async function loadData() {
-  loading.value = true
-  try {
-    const result = await fetchSubmitPage({
-      page: query.page, size: query.size,
-      sku: query.sku.trim() || undefined,
-      creator: query.creator.trim() || undefined,
-      status: query.status || undefined,
-    })
-    records.value = result?.records || []
-    total.value = Number(result?.total || 0)
-  } catch (e) {
-    message.error(e instanceof Error ? e.message : '加载失败')
-  } finally {
-    loading.value = false
-  }
 }
 
 // 单条操作
@@ -176,7 +149,7 @@ function confirmBatchDelete() {
 
 function getStatusType(s) {
   if (s === '已审批' || s === '已通过') return 'success'
-  if (s === '已驳回' || s === '已驳回') return 'error'
+  if (s === '已驳回') return 'error'
   return 'info'
 }
 
@@ -189,44 +162,35 @@ const columns = [
   },
   { title: '预估补货量', key: 'quantityReplenish', width: 100, align: 'center' },
   { title: '计划采购量', key: 'quantityPlan', width: 100, align: 'center' },
-  {
-    title: '备注', key: 'remark', width: 180, ellipsis: { tooltip: true },
+  { title: '备注', key: 'remark', width: 180, ellipsis: { tooltip: true },
     render(row) { return row.remark || '—' },
   },
-  {
-    title: '状态', key: 'statusText', width: 90, align: 'center',
+  { title: '状态', key: 'statusText', width: 90, align: 'center',
     render(row) {
       return h(NTag, { size: 'small', type: getStatusType(row.statusText), bordered: false },
         { default: () => row.statusText || '已提交' })
     },
   },
-  {
-    title: '审批人', key: 'approver', width: 100,
+  { title: '审批人', key: 'approver', width: 100,
     render(row) { return row.approver || '—' },
   },
-  {
-    title: '审批时间', key: 'approveTime', width: 170,
+  { title: '审批时间', key: 'approveTime', width: 170,
     render(row) { return formatTime(row.approveTime) },
   },
-  {
-    title: '创建人', key: 'creatorOwnerName', width: 120,
+  { title: '创建人', key: 'creatorOwnerName', width: 120,
     render(row) { return row.creatorOwnerName || row.creatorAccount || '—' },
   },
-  {
-    title: '提交时间', key: 'submitTime', width: 170,
+  { title: '提交时间', key: 'submitTime', width: 170,
     render(row) { return formatTime(row.submitTime) },
   },
-  {
-    title: '期望到货', key: 'expectArriveTime', width: 120,
+  { title: '期望到货', key: 'expectArriveTime', width: 120,
     render(row) { return row.expectArriveTime || '—' },
   },
-  {
-    title: '操作', key: 'actions', width: 220, align: 'center', fixed: 'right',
+  { title: '操作', key: 'actions', width: 220, align: 'center', fixed: 'right',
     render(row) {
       if (!canApprove.value) return h('span', { style: { color: '#ccc' } }, '—')
       return h('div', { style: { display: 'flex', justifyContent: 'center', gap: '8px' } }, [
-        h(NButton, { size: 'tiny', secondary: true,
-          onClick: () => openEdit(row) }, { default: () => '编辑' }),
+        h(NButton, { size: 'tiny', secondary: true, onClick: () => openEdit(row) }, { default: () => '编辑' }),
         h(NButton, { size: 'tiny', type: 'success', secondary: true,
           disabled: row.statusText === '已审批' || row.statusText === '已驳回',
           onClick: () => handleApprove(row) }, { default: () => '审批' }),
@@ -237,8 +201,6 @@ const columns = [
     },
   },
 ]
-
-onMounted(() => { checkPermission(); loadData() })
 </script>
 
 <template>
@@ -260,14 +222,13 @@ onMounted(() => { checkPermission(); loadData() })
       <NTabPane name="已驳回" tab="已驳回" />
     </NTabs>
 
-    <!-- 搜索栏 -->
     <NCard size="small" class="dashboard-card" style="margin-bottom:16px">
-      <NForm inline :model="query" @keyup.enter="handleSearch">
+      <NForm inline :model="filters" @keyup.enter="handleSearch">
         <NFormItem label="SKU">
-          <NInput v-model:value="query.sku" clearable placeholder="输入SKU模糊搜索" style="width:200px" />
+          <NInput v-model:value="filters.sku" clearable placeholder="输入SKU模糊搜索" style="width:200px" />
         </NFormItem>
         <NFormItem label="创建人">
-          <NInput v-model:value="query.creator" clearable placeholder="输入创建人" style="width:160px" />
+          <NInput v-model:value="filters.creator" clearable placeholder="输入创建人" style="width:160px" />
         </NFormItem>
         <NFormItem>
           <NSpace size="small">
@@ -318,6 +279,7 @@ onMounted(() => { checkPermission(); loadData() })
         }"
       />
     </NCard>
+
     <NModal v-model:show="showEditModal" preset="card" title="编辑采购计划" style="width: 420px">
       <NForm :model="editForm" label-placement="left" label-width="100">
         <NFormItem label="计划采购量">

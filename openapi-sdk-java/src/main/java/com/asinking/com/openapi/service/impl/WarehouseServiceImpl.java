@@ -11,4 +11,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class WarehouseServiceImpl extends ServiceImpl<WarehouseMapper, WarehouseEntity> implements WarehouseService {
+
+    @Override
+    public WarehouseEntity getByWid(Integer wid) {
+        return lambdaQuery().eq(WarehouseEntity::getWid, wid).one();
+    }
+
+    @Override
+    public java.util.List<WarehouseEntity> listByWids(java.util.List<Integer> wids) {
+        return lambdaQuery().in(WarehouseEntity::getWid, wids).list();
+    }
 }

@@ -1,16 +1,12 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { httpRequest } from '@/api/httpClient'
 
 const STORAGE_KEY = 'inventory-auth-session'
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 function getStoredSession() {
   const rawValue = localStorage.getItem(STORAGE_KEY)
-
-  if (!rawValue) {
-    return null
-  }
-
+  if (!rawValue) return null
   try {
     return JSON.parse(rawValue)
   } catch {
@@ -20,36 +16,17 @@ function getStoredSession() {
 }
 
 function isSessionExpired(session) {
-  if (!session?.expiresAtMillis) {
-    return false
-  }
-
+  if (!session?.expiresAtMillis) return false
   return Date.now() >= Number(session.expiresAtMillis)
 }
 
 function normalizeRole(role) {
-  if (!role) {
-    return ''
-  }
-
-  if (role === '管理员') {
-    return 'admin'
-  }
-
-  if (role === '用户') {
-    return 'user'
-  }
-
+  if (!role) return ''
+  if (role === '管理员') return 'admin'
+  if (role === '用户') return 'user'
   const normalized = String(role).trim().toLowerCase()
-
-  if (normalized === 'admin') {
-    return 'admin'
-  }
-
-  if (normalized === 'user' || normalized === 'viewer') {
-    return 'user'
-  }
-
+  if (normalized === 'admin') return 'admin'
+  if (normalized === 'user' || normalized === 'viewer') return 'user'
   return String(role).trim()
 }
 
@@ -69,80 +46,43 @@ export const useAuthStore = defineStore('auth', () => {
   const ownerName = computed(() => session.value?.user?.ownerName || '')
 
   async function login(account, password) {
-    const payload = {
-      account: account.trim(),
-      password,
-    }
-
     try {
-      const response = await fetch(`${API_BASE_URL}/api/user/login`, {
+      const { response, data } = await httpRequest({
+        path: '/api/user/login',
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: { account: account.trim(), password },
       })
 
-      const responseText = await response.text()
-      let responseData = null
-
-      if (responseText) {
-        try {
-          responseData = JSON.parse(responseText)
-        } catch {
-          responseData = { message: responseText }
-        }
-      }
-
       if (!response.ok) {
-        return {
-          success: false,
-          message: responseData?.message || `登录失败，状态码：${response.status}`,
-        }
+        return { success: false, message: data?.message || `登录失败，状态码：${response.status}` }
       }
 
-      if (!responseData || responseData.code !== 0) {
-        return {
-          success: false,
-          message: responseData?.message || '登录失败，请检查账号密码。',
-        }
+      if (!data || data.code !== 0) {
+        return { success: false, message: data?.message || '登录失败，请检查账号密码。' }
       }
 
-      const tokenValue = responseData.data?.token
-
+      const tokenValue = data.data?.token
       if (!tokenValue) {
-        return {
-          success: false,
-          message: '登录失败，未获取到 token。',
-        }
+        return { success: false, message: '登录失败，未获取到 token。' }
       }
-
-      const accountValue = responseData.data?.account || payload.account
-      const roleValue = normalizeRole(responseData.data?.role)
 
       const nextSession = {
         token: tokenValue,
-        tokenType: responseData.data?.tokenType || 'Bearer',
-        expiresAtMillis: responseData.data?.expiresAtMillis || null,
+        tokenType: data.data?.tokenType || 'Bearer',
+        expiresAtMillis: data.data?.expiresAtMillis || null,
         user: {
-          account: accountValue,
-          name: accountValue,
-          role: roleValue,
-          ownerName: responseData.data?.ownerName || '',
+          account: data.data?.account || account,
+          name: data.data?.account || account,
+          role: normalizeRole(data.data?.role),
+          ownerName: data.data?.ownerName || '',
         },
       }
 
       session.value = nextSession
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSession))
-
-      return {
-        success: true,
-        message: '登录成功',
-      }
+      return { success: true, message: '登录成功' }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : '登录失败，请检查后端服务是否启动。'
-
+      const message = error instanceof Error ? error.message : '登录失败，请检查后端服务是否启动。'
       return { success: false, message }
     }
   }
@@ -154,30 +94,18 @@ export const useAuthStore = defineStore('auth', () => {
     session.value = null
     localStorage.removeItem(STORAGE_KEY)
 
-    if (!currentToken) {
-      return
-    }
+    if (!currentToken) return
 
     try {
-      await fetch(`${API_BASE_URL}/api/user/logout`, {
+      await httpRequest({
+        path: '/api/user/logout',
         method: 'POST',
-        headers: {
-          Authorization: `${currentTokenType} ${currentToken}`,
-        },
+        headers: { Authorization: `${currentTokenType} ${currentToken}` },
       })
     } catch {
-      return
+      // 登出接口失败不影响本地清除
     }
   }
 
-  return {
-    user,
-    isLoggedIn,
-    isAdmin,
-    ownerName,
-    token,
-    tokenType,
-    login,
-    logout,
-  }
+  return { user, isLoggedIn, isAdmin, ownerName, token, tokenType, login, logout }
 })

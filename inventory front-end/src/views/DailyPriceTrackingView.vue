@@ -1,54 +1,19 @@
 <script setup>
-import { h, onMounted, reactive, ref } from 'vue'
+import { h, ref } from 'vue'
 import {
-  NButton, NCard, NDataTable, NForm, NFormItem, NInput, NSelect, NSpace, NTag, useMessage,
+  NButton, NCard, NDataTable, NForm, NFormItem, NInput, NSpace, NTag, useMessage,
 } from 'naive-ui'
 import { fetchDailyPriceTracking, uploadDailyPriceTracking, exportDailyPriceTracking } from '@/api/dailyPriceTracking'
+import { useDataTable } from '@/composables/useDataTable'
 
 const message = useMessage()
-
-const loading = ref(false)
 const uploading = ref(false)
-const records = ref([])
-const total = ref(0)
 
-const filters = reactive({ site: '', sku: '', brand: '', operator: '' })
-const query = reactive({ page: 1, size: 20 })
-
-function handleSearch() {
-  query.page = 1
-  loadData()
-}
-
-function handleReset() {
-  filters.site = ''
-  filters.sku = ''
-  filters.brand = ''
-  filters.operator = ''
-  query.page = 1
-  loadData()
-}
-
-async function loadData() {
-  loading.value = true
-  try {
-    const result = await fetchDailyPriceTracking({
-      page: query.page, size: query.size,
-      site: filters.site.trim() || undefined,
-      sku: filters.sku.trim() || undefined,
-      brand: filters.brand.trim() || undefined,
-      operator: filters.operator.trim() || undefined,
-    })
-    records.value = result?.records || []
-    total.value = Number(result?.total || 0)
-  } catch (e) {
-    message.error(e instanceof Error ? e.message : '加载失败')
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => { loadData() })
+const { loading, records, total, query, filters, loadData, handleSearch, handleReset } = useDataTable(
+  fetchDailyPriceTracking,
+  { site: '', sku: '', brand: '', operator: '' },
+  { pageSize: 20 },
+)
 
 async function handleUpload() {
   const input = document.createElement('input')
@@ -146,7 +111,6 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
       </NSpace>
     </div>
 
-    <!-- 搜索栏 -->
     <NCard size="small" class="dashboard-card" style="margin-bottom:16px">
       <NForm inline :model="filters" @keyup.enter="handleSearch">
         <NFormItem label="站点">

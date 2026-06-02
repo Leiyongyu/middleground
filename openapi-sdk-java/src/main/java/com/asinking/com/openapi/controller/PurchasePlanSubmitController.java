@@ -53,8 +53,7 @@ public class PurchasePlanSubmitController {
             e.setCreatorOwnerName(ownerName);
             // 自动填充仓库名
             if (e.getWid() != null && (e.getWarehouseName() == null || e.getWarehouseName().isEmpty())) {
-                WarehouseEntity wh = warehouseService.lambdaQuery()
-                        .eq(WarehouseEntity::getWid, e.getWid()).one();
+                WarehouseEntity wh = warehouseService.getByWid(e.getWid());
                 if (wh != null) e.setWarehouseName(wh.getName());
             }
         }
@@ -197,11 +196,9 @@ public class PurchasePlanSubmitController {
     /** 根据登录账号反查负责人姓名，为空时用账号兜底。 */
     private String resolveOwnerName(String account) {
         if (account == null || account.isEmpty() || "null".equals(account)) return "";
-        UserEntity user = userService.lambdaQuery()
-                .eq(UserEntity::getAccount, account).one();
+        UserEntity user = userService.getByAccount(account);
         String owner = user != null && user.getOwnerName() != null && !user.getOwnerName().trim().isEmpty()
                 ? user.getOwnerName().trim() : "";
-        // 如果 ownerName 为空，用 account 兜底
         return !owner.isEmpty() ? owner : account;
     }
 }

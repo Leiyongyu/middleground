@@ -96,9 +96,7 @@ public class PurchasePlanController {
     public Result<List<Map<String, Object>>> searchWarehouses(@RequestParam(defaultValue = "") String keyword) {
         List<Integer> allowedWids = Arrays.asList(18676, 18675, 18674);
         List<Map<String, Object>> list = new ArrayList<>();
-        for (WarehouseEntity wh : warehouseService.lambdaQuery()
-                .in(WarehouseEntity::getWid, allowedWids)
-                .list()) {
+        for (WarehouseEntity wh : warehouseService.listByWids(allowedWids)) {
             String name = wh.getName();
             if (name == null || name.isEmpty()) continue;
             if (!keyword.isEmpty() && !name.toLowerCase().contains(keyword.toLowerCase())) continue;
@@ -120,8 +118,7 @@ public class PurchasePlanController {
         String baseSku = parts.length >= 2 ? parts[0] + "-" + parts[1] : sku.trim();
 
         // wid → 站点标签（注意：warehouse 表主键是 id，需要用 wid 字段查）
-        WarehouseEntity wh = warehouseService.lambdaQuery()
-                .eq(WarehouseEntity::getWid, wid).one();
+        WarehouseEntity wh = warehouseService.getByWid(wid);
         String siteLabel = wh != null ? whNameToSite(wh.getName()) : "";
 
         // 匹配运营数据
