@@ -2,9 +2,9 @@ spring:
   application:
     name: JMH_Middle_Platform_System
   datasource:
-    url: "jdbc:mysql://localhost:3306/middleground?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
-    username: "root"
-    password: "123456"
+    url: ${DB_URL:jdbc:mysql://localhost:3306/middleground?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:123456}
     driver-class-name: "com.mysql.cj.jdbc.Driver"
   servlet:
     multipart:
@@ -15,6 +15,11 @@ spring:
     baseline-on-migrate: true
     baseline-version: 4
     locations: classpath:db/migration
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    database: ${REDIS_DATABASE:0}
+    timeout: 3000ms
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
   configuration:
@@ -26,17 +31,17 @@ server:
     max-swallow-size: -1
     uri-encoding: UTF-8
 lingxing:
-  endpoint: "http://8.137.177.25/lingxing-proxy"
-  app-id: "ak_DBmvLSyHfhc5H"
-  app-secret: "8VSwwqXgu/RtUvslYIacHQ=="
+  endpoint: ${LINGXING_ENDPOINT:http://8.137.177.25/lingxing-proxy}
+  app-id: ${LINGXING_APP_ID:ak_DBmvLSyHfhc5H}
+  app-secret: ${LINGXING_APP_SECRET:8VSwwqXgu/RtUvslYIacHQ==}
   connect-timeout: 60000
   read-timeout: 120000
   token-refresh-skew-seconds: 300
   inventory-wids: "18676,18701,18675,18674,18702,18700,18699"
 
 frontend-auth:
-  client-id: "JMH_WEB_ADMIN"
-  api-key: "61f3974092af446da7b51be512842959"
+  client-id: ${FRONTEND_CLIENT_ID:JMH_WEB_ADMIN}
+  api-key: ${FRONTEND_API_KEY:61f3974092af446da7b51be512842959}
   allowed-origins:
     - "http://localhost:3000"
     - "http://localhost:5173"
@@ -44,11 +49,11 @@ frontend-auth:
     - "http://127.0.0.1:5173"
 
 goodcang:
-  app-token: "a1bc2f4455c6ccb0e9a67b2ce984a3c5"
-  app-key: "b99a3ce835ef9711ad3c3d451b6f9815"
+  app-token: ${GOODCANG_APP_TOKEN:a1bc2f4455c6ccb0e9a67b2ce984a3c5}
+  app-key: ${GOODCANG_APP_KEY:b99a3ce835ef9711ad3c3d451b6f9815}
 
 jwt:
-  secret: "dev-secret-change-me-please-32chars!!"
+  secret: ${JWT_SECRET:dev-secret-change-me-please-32chars!!}
   issuer: "JMH_Middle_Platform_System"
   ttl-seconds: 7200
 springdoc:
