@@ -1,45 +1,77 @@
 <script setup>
-import { h, ref } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import {
-  NButton, NCard, NDataTable, NForm, NFormItem, NInput, NSpace, NTag, useMessage,
+  NButton, NCard, NCheckbox, NDataTable, NForm, NFormItem, NInput, NSelect, NSpace, NTag, useMessage,
 } from 'naive-ui'
-import { fetchDailyPriceTracking, uploadDailyPriceTracking, exportDailyPriceTracking } from '@/api/dailyPriceTracking'
+import { fetchDailyPriceTracking, exportDailyPriceTracking } from '@/api/dailyPriceTracking'
+import { fetchInventoryOverviewWarehouses } from '@/api/inventoryOverview'
 import { useDataTable } from '@/composables/useDataTable'
 
 const message = useMessage()
-const uploading = ref(false)
 
 const { loading, records, total, query, filters, loadData, handleSearch, handleReset } = useDataTable(
   fetchDailyPriceTracking,
-  { site: '', sku: '', brand: '', operator: '' },
-  { pageSize: 20 },
+  { sku: '', brand: '', operator: '' },
+  { pageSize: 20, loadOnMount: false },
 )
 
-async function handleUpload() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.xlsx,.xls'
-  input.onchange = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    uploading.value = true
-    try {
-      const res = await uploadDailyPriceTracking(file)
-      message.success(res?.message || '导入成功')
-      loadData()
-    } catch (err) {
-      message.error(err instanceof Error ? err.message : '导入失败')
-    } finally {
-      uploading.value = false
-    }
+// ===== 仓库多选下拉（和补货页同一个接口） =====
+const warehouseLoading = ref(false)
+const warehouseOptions = ref([])
+const siteFilter = ref([])
+
+async function loadWarehouseOptions() {
+  warehouseLoading.value = true
+  try {
+    const list = await fetchInventoryOverviewWarehouses()
+    warehouseOptions.value = Array.isArray(list)
+      ? list.map((item) => {
+          const label = item?.label ? String(item.label) : ''
+          if (!label) return null
+          return { label, value: label }
+        }).filter(Boolean)
+      : []
+    siteFilter.value = []
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载仓库下拉失败')
+    warehouseOptions.value = []
+    siteFilter.value = []
+  } finally {
+    warehouseLoading.value = false
   }
-  input.click()
+}
+
+// 包装 loadData：将仓库多选转为逗号分隔字符串
+async function doLoadData() {
+  const selected = Array.isArray(siteFilter.value) ? siteFilter.value : []
+  const optionCount = warehouseOptions.value.length
+  // 全部选中或不选 → 不传 site 参数，查全部
+  filters.site = selected.length > 0 && selected.length < optionCount ? selected.join(',') : ''
+  loadData()
+}
+
+onMounted(() => {
+  loadWarehouseOptions().then(() => doLoadData())
+})
+
+function onSearch() {
+  query.page = 1
+  doLoadData()
+}
+
+function onReset() {
+  filters.sku = ''
+  filters.operator = ''
+  siteFilter.value = []
+  query.page = 1
+  filters.site = ''
+  loadData()
 }
 
 async function handleExport() {
   try {
     await exportDailyPriceTracking({
-      site: filters.site.trim() || undefined,
+      site: filters.site || undefined,
       sku: filters.sku.trim() || undefined,
       brand: filters.brand.trim() || undefined,
       operator: filters.operator.trim() || undefined,
@@ -50,6 +82,18 @@ async function handleExport() {
   }
 }
 
+function renderWarehouseOption({ node, option, selected }) {
+  return h('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '8px', width: '100%' },
+    onClick: node?.props?.onClick,
+    onMouseenter: node?.props?.onMouseenter,
+    onMousemove: node?.props?.onMousemove,
+  }, [
+    h(NCheckbox, { checked: selected, style: { pointerEvents: 'none' } }),
+    h('span', { style: { flex: 1, minWidth: 0 } }, option.label || option.value),
+  ])
+}
+
 function renderLink(url) {
   if (!url) return ''
   return h('a', { href: url, target: '_blank', style: { color: '#1677ff' } }, url.length > 40 ? url.substring(0, 40) + '...' : url)
@@ -57,7 +101,7 @@ function renderLink(url) {
 
 const columns = [
   { title: '站点', key: 'site', width: 100, fixed: 'left' },
-  { title: 'SKU等级', key: 'skuLevel', width: 90 },
+  { title: 'SKU等级', key: 'skuLevel', width: 90, fixed: 'left' },
   { title: 'SKU', key: 'sku', width: 140, fixed: 'left', ellipsis: { tooltip: true } },
   { title: '最低价', key: 'ourLowestPrice', width: 90, align: 'right',
     render: (row) => row.ourLowestPrice ?? '' },
@@ -105,30 +149,38 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h2 class="users-title" style="margin:0">每日跟价</h2>
       <NSpace>
-        <NButton @click="loadData" :loading="loading">刷新</NButton>
+        <NButton @click="doLoadData" :loading="loading">刷新</NButton>
         <NButton type="primary" @click="handleExport">导出 Excel</NButton>
-        <NButton type="info" :loading="uploading" @click="handleUpload">上传导入</NButton>
       </NSpace>
     </div>
 
     <NCard size="small" class="dashboard-card" style="margin-bottom:16px">
-      <NForm inline :model="filters" @keyup.enter="handleSearch">
+      <NForm inline :model="filters" @keyup.enter="onSearch">
         <NFormItem label="站点">
-          <NInput v-model:value="filters.site" clearable placeholder="站点" style="width:120px" />
+          <NSelect
+            v-model:value="siteFilter"
+            multiple
+            filterable
+            clearable
+            placeholder="选择站点"
+            :options="warehouseOptions"
+            :loading="warehouseLoading"
+            :render-option="renderWarehouseOption"
+            :max-tag-count="1"
+            style="width: 180px"
+            @update:value="onSearch"
+          />
         </NFormItem>
         <NFormItem label="SKU">
           <NInput v-model:value="filters.sku" clearable placeholder="SKU模糊搜索" style="width:180px" />
-        </NFormItem>
-        <NFormItem label="品牌">
-          <NInput v-model:value="filters.brand" clearable placeholder="品牌" style="width:120px" />
         </NFormItem>
         <NFormItem label="操作员">
           <NInput v-model:value="filters.operator" clearable placeholder="操作员" style="width:120px" />
         </NFormItem>
         <NFormItem>
           <NSpace size="small">
-            <NButton type="primary" secondary @click="handleSearch" :loading="loading">查询</NButton>
-            <NButton @click="handleReset">重置</NButton>
+            <NButton type="primary" secondary @click="onSearch" :loading="loading">查询</NButton>
+            <NButton @click="onReset">重置</NButton>
           </NSpace>
         </NFormItem>
       </NForm>
@@ -144,7 +196,7 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
         :loading="loading"
         :columns="columns"
         :data="records"
-        :row-key="(row) => row.id"
+        :row-key="(row) => `${row.site || ''}|${row.sku || ''}`"
         :scroll-x="scrollX"
         :max-height="510"
         :pagination="{
@@ -153,8 +205,8 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
           itemCount: total,
           showSizePicker: true,
           pageSizes: [10, 20, 50, 100],
-          onUpdatePage: (p) => { query.page = p; loadData() },
-          onUpdatePageSize: (s) => { query.size = s; query.page = 1; loadData() },
+          onUpdatePage: (p) => { query.page = p; doLoadData() },
+          onUpdatePageSize: (s) => { query.size = s; query.page = 1; doLoadData() },
         }"
         striped
       />

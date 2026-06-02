@@ -62,4 +62,6 @@ public class InventoryOverviewItem {
     private Integer maxMonthlyReplenish;
     /** 负责人（根据 SKU 前缀匹配 brand_owner 表） */
     private String owner;
+    /** SKU产品等级（S/A/B/C/D/E），根据近30天销量和毛利率计算，快照刷新时更新 */
+    private String skuLevel;
 }

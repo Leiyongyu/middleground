@@ -409,6 +409,9 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 item.setOverseasTotalRatio(divide(item.getOverseasTotal(), d30));
                 item.setTotalInventoryRatio(divide(item.getTotalInventory(), d30));
                 item.setOwner(matchOwner(baseSku, ownerByBrand));
+                // 计算 SKU 产品等级（按 站点+SKU 维度，和采购计划备注逻辑一致）
+                item.setSkuLevel(calcProductLevel(d30,
+                        item.getLast30DaysProfit() != null ? item.getLast30DaysProfit().doubleValue() : 0));
                 result.add(item);
             }
         }
@@ -450,7 +453,15 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         if (!StringUtils.hasText(sku)) return ""; String[] p = sku.split("-"); return p.length >= 2 ? p[1] : "";
     }
     private String extractBaseSku(String sku) {
-        if (!StringUtils.hasText(sku)) return ""; String[] p = sku.split("-"); return p.length >= 2 ? p[0] + "-" + p[1] : sku;
+        if (!StringUtils.hasText(sku)) return "";
+        String[] parts = sku.split("-");
+        if (parts.length < 2) return sku;
+        // 首段是 "数字PC" 格式（如 2PC、4PC）时保留前三段，与领星拉取逻辑一致
+        if (parts[0].matches("\\d+PC")) {
+            if (parts.length >= 3) return parts[0] + "-" + parts[1] + "-" + parts[2];
+            return parts[0] + "-" + parts[1];
+        }
+        return parts[0] + "-" + parts[1];
     }
     private String mapSiteName(String n) { String t = n != null ? n.trim() : ""; return StringUtils.hasText(t) ? SITE_NAME_MAP.getOrDefault(t, t) : ""; }
     private static final Map<String, String> SITE_NAME_MAP = new HashMap<>();
@@ -469,5 +480,16 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         return "";
     }
     private String toWarehouseLabel(WarehouseEntity wh) { return whNameToSite(wh.getName()); }
+
+    /** SKU 产品等级：根据近30天销量和毛利率计算（与采购计划备注逻辑一致） */
+    private String calcProductLevel(int sales, double profitRate) {
+        if (sales >= 30 && profitRate >= 20) return "S";
+        if (sales >= 15 && profitRate >= 20) return "A";
+        if (sales >= 10 && profitRate >= 18) return "B";
+        if ((sales >= 10 && profitRate >= 10) || (sales >= 5 && sales < 10 && profitRate >= 15)) return "C";
+        if ((sales < 5 && profitRate >= 15) || (sales >= 5 && sales < 10 && profitRate >= 10 && profitRate < 15)) return "D";
+        return "E";
+    }
+
     private static class SkuSiteInv { String sku, siteLabel; int overseasSellable, overseasOnway, localSellable, localOnway, lockNum; SkuSiteInv(String s, String l) { sku = s; siteLabel = l; } }
 }

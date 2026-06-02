@@ -404,8 +404,14 @@ public class LingxingEbayService {
     private String extractBaseSku(String msku) {
         if (msku == null || msku.isEmpty()) return "";
         String[] parts = msku.split("-");
-        if (parts.length >= 2) return parts[0] + "-" + parts[1];
-        return msku;
+        if (parts.length < 2) return msku;
+        // 首段是 "数字PC" 格式（如 2PC、4PC）时保留前三段
+        if (parts[0].matches("\\d+PC")) {
+            if (parts.length >= 3) return parts[0] + "-" + parts[1] + "-" + parts[2];
+            return parts[0] + "-" + parts[1];
+        }
+        // 正常情况保留前两段
+        return parts[0] + "-" + parts[1];
     }
 
     private String uuid32() {
