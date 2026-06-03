@@ -5,6 +5,11 @@ export function fetchDailyPriceTracking({ page, size, site, sku, brand, operator
   return apiGet('/api/daily-price-tracking', { page, size, site, sku, brand, operator })
 }
 
+/** 保存或更新备注（按 site+sku upsert） */
+export function saveRemark(site, sku, remark) {
+  return apiPost('/api/daily-price-tracking/remark', { site, sku, remark })
+}
+
 /** 上传 Excel 导入 */
 export function uploadDailyPriceTracking(file) {
   const form = new FormData()

@@ -7,6 +7,7 @@ import com.asinking.com.openapi.dto.response.WarehouseOptionItem;
 import com.asinking.com.openapi.entity.*;
 import com.asinking.com.openapi.mapper.mp.*;
 import com.asinking.com.openapi.service.*;
+import com.asinking.com.openapi.utils.InventoryUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -189,25 +190,29 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         for (Map.Entry<Integer, WarehouseEntity> e : warehouseMap.entrySet())
             widToSite.put(e.getKey(), toWarehouseLabel(e.getValue()));
 
-        // ==== 1. 基准 (baseSku, site) from ebay_product_listing ====
+        // ==== 1. 基准 (groupKey, site) from ebay_product_listing ====
+        // 使用 extractInventoryGroupKey：去掉 PC 前缀后提取 baseSku，
+        // 使 2PC-BMW-30087 和 BMW-30087 归入同一商品分组
         Map<String, String> skuProductNameMap = new LinkedHashMap<>();
         Map<String, Map<String, SkuSiteInv>> siteRowsBySku = new LinkedHashMap<>();
         Set<String> seenPairs = new HashSet<>();
         for (EbayProductListingEntity pl : listingService.list()) {
-            String baseSku = pl.getSku() != null ? pl.getSku().trim() : "";
-            if (baseSku.isEmpty()) continue;
-            if (!skuProductNameMap.containsKey(baseSku) && pl.getLocalName() != null)
-                skuProductNameMap.put(baseSku, pl.getLocalName().trim());
+            String rawSku = pl.getSku() != null ? pl.getSku().trim() : "";
+            if (rawSku.isEmpty()) continue;
+            String groupKey = InventoryUtils.extractInventoryGroupKey(rawSku);
+            if (groupKey.isEmpty()) continue;
+            if (!skuProductNameMap.containsKey(groupKey) && pl.getLocalName() != null)
+                skuProductNameMap.put(groupKey, pl.getLocalName().trim());
             String site = mapSiteName(pl.getSiteName());
-            if (!seenPairs.add(baseSku + "|" + site)) continue;
-            siteRowsBySku.computeIfAbsent(baseSku, k -> new LinkedHashMap<>())
-                    .put(site, new SkuSiteInv(baseSku, site));
+            if (!seenPairs.add(groupKey + "|" + site)) continue;
+            siteRowsBySku.computeIfAbsent(groupKey, k -> new LinkedHashMap<>())
+                    .put(site, new SkuSiteInv(groupKey, site));
         }
 
-        // ==== 2. 库存 ====
+        // ==== 2. 库存（使用 groupKey 归并 PC/非PC）====
         for (WarehouseInventoryDetailEntity d : inventoryService.lambdaQuery()
                 .in(WarehouseInventoryDetailEntity::getWid, inventoryWids).list()) {
-            String baseSku = extractBaseSku(d.getSku());
+            String baseSku = InventoryUtils.extractInventoryGroupKey(d.getSku());
             if (baseSku.isEmpty()) continue;
             WarehouseEntity wh = warehouseMap.get(d.getWid());
             if (wh == null) continue;
@@ -249,7 +254,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
 
         Map<String, String> createTimeMap = new LinkedHashMap<>();
         for (GoodcangGrnDetailEntity d : allGrnDetails) {
-            String mid = extractMiddleCode(d.getProductSku());
+            String mid = InventoryUtils.extractMiddleCodeForInventory(d.getProductSku());
             if (mid.isEmpty() || d.getReceivingCode() == null) continue;
             GoodcangGrnListEntity gl = grnListByCode.get(d.getReceivingCode());
             if (gl == null || gl.getWarehouseCode() == null || gl.getCreateAt() == null) continue;
@@ -270,7 +275,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty()) continue;
             String site = whNameToSite(whName.trim());
             if (site.isEmpty()) continue;
-            String key = site + "|" + extractBaseSku(sku.trim());
+            String key = site + "|" + InventoryUtils.extractInventoryGroupKey(sku.trim());
 
             // 采购下单时间（取最新）
             if (po.getOrderTime() != null) {
@@ -292,7 +297,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty() || ws.getOptTime() == null) continue;
             String site = whNameToSite(whName.trim());
             if (site.isEmpty()) continue;
-            String key = site + "|" + extractBaseSku(sku.trim());
+            String key = site + "|" + InventoryUtils.extractInventoryGroupKey(sku.trim());
             LocalDate od = ws.getOptTime().toLocalDate(), ex = inboundTimeMap.get(key);
             if (ex == null || od.isBefore(ex)) inboundTimeMap.put(key, od);
         }
@@ -312,7 +317,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         for (EbaySalesEntity s : ebaySalesMapper.selectList(null)) {
             String sku = s.getSku(), currency = s.getCurrency();
             if (sku == null || sku.isEmpty() || currency == null || currency.isEmpty()) continue;
-            String mid = extractMiddleCode(sku);
+            String mid = InventoryUtils.extractMiddleCodeForInventory(sku);
             if (mid.isEmpty()) continue;
             String site = currencyToSite(currency.toUpperCase());
             if (site.isEmpty()) continue;
@@ -342,7 +347,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty()) continue;
             String site = whNameToSite(whName.trim());
             if (site.isEmpty()) continue;
-            String key = site + "|" + extractBaseSku(sku.trim());
+            String key = site + "|" + InventoryUtils.extractInventoryGroupKey(sku.trim());
             purchasePlanCountMap.merge(key, 1, Integer::sum);
         }
 
@@ -362,7 +367,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 item.setLocalOnway(inv.localOnway); item.setLocalSellable(inv.localSellable);
                 item.setLockNum(inv.lockNum);
                 item.setTotalInventory(inv.overseasSellable + inv.overseasOnway + inv.localSellable + inv.localOnway);
-                String salesKey = inv.siteLabel + "|" + extractMiddleCode(baseSku);
+                String salesKey = inv.siteLabel + "|" + InventoryUtils.extractMiddleCode(baseSku);
                 item.setLast7DaysSales(sales7d.getOrDefault(salesKey, 0));
                 item.setLast30DaysSales(sales30d.getOrDefault(salesKey, 0));
                 item.setLast90DaysSales(sales90d.getOrDefault(salesKey, 0));
@@ -370,7 +375,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                         ? monthlySalesMap.get(salesKey).values().stream().max(Integer::compareTo).orElse(0)
                         : null);
 
-                String mid = extractMiddleCode(baseSku);
+                String mid = InventoryUtils.extractMiddleCode(baseSku);
                 if (!mid.isEmpty() && !inv.siteLabel.isEmpty()) {
                     String latestTime = null;
                     for (Map.Entry<Integer, String> e : widToSite.entrySet())
@@ -441,54 +446,29 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         return l;
     }
     private BigDecimal divide(int n, int d) {
-        if (d == 0) return BigDecimal.ZERO;
-        return BigDecimal.valueOf(n).divide(BigDecimal.valueOf(d), 4, RoundingMode.HALF_UP);
+        return InventoryUtils.safeDivide(n, d);
     }
     private String matchOwner(String sku, Map<String, String> ob) {
-        if (!StringUtils.hasText(sku)) return "";
-        int i = sku.indexOf('-');
-        return ob.getOrDefault(i > 0 ? sku.substring(0, i).toUpperCase() : sku.toUpperCase(), "");
+        return InventoryUtils.matchOwner(sku, ob);
     }
     private String extractMiddleCode(String sku) {
-        if (!StringUtils.hasText(sku)) return ""; String[] p = sku.split("-"); return p.length >= 2 ? p[1] : "";
+        return InventoryUtils.extractMiddleCode(sku);
     }
     private String extractBaseSku(String sku) {
-        if (!StringUtils.hasText(sku)) return "";
-        String[] parts = sku.split("-");
-        if (parts.length < 2) return sku;
-        // 首段是 "数字PC" 格式（如 2PC、4PC）时保留前三段，与领星拉取逻辑一致
-        if (parts[0].matches("\\d+PC")) {
-            if (parts.length >= 3) return parts[0] + "-" + parts[1] + "-" + parts[2];
-            return parts[0] + "-" + parts[1];
-        }
-        return parts[0] + "-" + parts[1];
+        return InventoryUtils.extractBaseSku(sku);
     }
-    private String mapSiteName(String n) { String t = n != null ? n.trim() : ""; return StringUtils.hasText(t) ? SITE_NAME_MAP.getOrDefault(t, t) : ""; }
-    private static final Map<String, String> SITE_NAME_MAP = new HashMap<>();
-    static { SITE_NAME_MAP.put("ebay汽配", "美国"); SITE_NAME_MAP.put("法国", "德国"); }
+    private String mapSiteName(String n) { return InventoryUtils.mapSiteName(n); }
 
-    private String currencyToSite(String c) { return CURRENCY_TO_SITE.getOrDefault(c, ""); }
-    private static final Map<String, String> CURRENCY_TO_SITE = new HashMap<>();
-    static { CURRENCY_TO_SITE.put("USD", "美国"); CURRENCY_TO_SITE.put("GBP", "英国"); CURRENCY_TO_SITE.put("EUR", "德国"); }
+    private String currencyToSite(String c) { return InventoryUtils.currencyToSite(c); }
 
     private String whNameToSite(String n) {
-        if (!StringUtils.hasText(n)) return "";
-        if (n.startsWith("CTUAMZ")) return "";
-        if (n.contains("-US") || n.contains("加州") || n.contains("新泽西")) return "美国";
-        if (n.contains("-DE") || n.contains("德国")) return "德国";
-        if (n.contains("-UK") || n.contains("英国")) return "英国";
-        return "";
+        return InventoryUtils.whNameToSite(n);
     }
     private String toWarehouseLabel(WarehouseEntity wh) { return whNameToSite(wh.getName()); }
 
-    /** SKU 产品等级：根据近30天销量和毛利率计算（与采购计划备注逻辑一致） */
+    /** SKU 产品等级：委托 InventoryUtils */
     private String calcProductLevel(int sales, double profitRate) {
-        if (sales >= 30 && profitRate >= 20) return "S";
-        if (sales >= 15 && profitRate >= 20) return "A";
-        if (sales >= 10 && profitRate >= 18) return "B";
-        if ((sales >= 10 && profitRate >= 10) || (sales >= 5 && sales < 10 && profitRate >= 15)) return "C";
-        if ((sales < 5 && profitRate >= 15) || (sales >= 5 && sales < 10 && profitRate >= 10 && profitRate < 15)) return "D";
-        return "E";
+        return InventoryUtils.calcProductLevel(sales, profitRate);
     }
 
     private static class SkuSiteInv { String sku, siteLabel; int overseasSellable, overseasOnway, localSellable, localOnway, lockNum; SkuSiteInv(String s, String l) { sku = s; siteLabel = l; } }

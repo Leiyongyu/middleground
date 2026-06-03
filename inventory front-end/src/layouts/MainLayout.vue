@@ -310,7 +310,7 @@ async function handleLogout() {
 
       <!-- 内容区域 -->
       <NLayoutContent
-        content-style="padding: 24px; background: #f0f2f5; min-height: calc(100vh - 50px);"
+        content-style="padding: 12px 16px; background: #f0f2f5; min-height: calc(100vh - 50px);"
         class="layout-content"
       >
         <RouterView />

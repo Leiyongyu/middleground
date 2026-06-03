@@ -133,7 +133,7 @@ const replenishColumns = [
 ].map((c) => ({ ...c, resizable: true, minWidth: 70 }))
 
 const replenishScrollX = replenishColumns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
-const replenishMaxHeight = 510
+const replenishMaxHeight = 400
 
 async function loadWarehouseOptions() {
   warehouseLoading.value = true
@@ -250,7 +250,7 @@ function renderWarehouseOption({ node, option, selected }) {
 </script>
 
 <template>
-  <section class="dashboard-page">
+  <div class="dashboard-page">
     <!-- ===== KPI 数据卡片 ===== -->
     <div class="kpi-grid">
       <div
@@ -273,7 +273,8 @@ function renderWarehouseOption({ node, option, selected }) {
     </div>
 
     <!-- ===== 主表格卡片 ===== -->
-    <NCard title="库存总览" size="large" class="dashboard-card">
+    <div class="table-card-wrap">
+    <NCard title="库存总览" size="large">
       <template #header-extra>
         <NSpace align="center" size="small">
           <NTag type="info" :bordered="false" size="small">更新 {{ updatedAt || '-' }}</NTag>
@@ -331,8 +332,6 @@ function renderWarehouseOption({ node, option, selected }) {
         </NFormItem>
       </NForm>
 
-      <div style="height: 8px" class="spacer"></div>
-
       <NDataTable
         :loading="loading"
         :columns="replenishColumns"
@@ -345,29 +344,36 @@ function renderWarehouseOption({ node, option, selected }) {
         striped
       />
     </NCard>
-  </section>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-/* ===== KPI 卡片网格 ===== */
+/* ===== 页面容器：flex 纵向布局 ===== */
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ===== KPI 卡片网格（不伸缩） ===== */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .kpi-card {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
   background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.04);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
-  animation: card-slide-up 0.4s ease both;
   cursor: default;
 }
 
@@ -376,42 +382,85 @@ function renderWarehouseOption({ node, option, selected }) {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
-@keyframes card-slide-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 .kpi-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 8px;
   transition: transform 0.3s ease;
 }
 
 .kpi-card:hover .kpi-icon { transform: scale(1.08); }
 
-.kpi-info { display: flex; flex-direction: column; gap: 2px; }
-.kpi-value { font-size: 22px; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
-.kpi-label { font-size: 12px; color: #999; }
+.kpi-info { display: flex; flex-direction: column; gap: 1px; }
+.kpi-value { font-size: 20px; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
+.kpi-label { font-size: 11px; color: #999; }
 
-/* ===== 主内容卡片 ===== */
+/* ===== 表格卡片：填充剩余空间 ===== */
+.table-card-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card-wrap :deep(.n-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card-wrap :deep(.n-card__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px 12px;
+}
+
+.table-card-wrap :deep(.n-card-header) {
+  padding: 10px 16px 0;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* filter form: 不伸缩 */
+.table-card-wrap :deep(.filter-form) {
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+/* 表格容器：填充剩余空间 + 内部滚动 */
+.table-card-wrap :deep(.n-data-table) {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 让表格 body 可滚动（覆盖组件 max-height） */
+.table-card-wrap :deep(.n-data-table .n-data-table-base-table-body) {
+  overflow-y: auto !important;
+}
+
+/* ===== 通用卡片 ===== */
 .dashboard-card {
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
 }
 
 .dashboard-card :deep(.n-card-header) {
-  padding: 18px 24px 0;
+  padding: 10px 16px 0;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .dashboard-card :deep(.n-card__content) {
-  padding: 16px 24px 20px;
+  padding: 8px 16px 12px;
 }
 
 .dashboard-card :deep(.n-data-table-th) {
@@ -426,7 +475,7 @@ function renderWarehouseOption({ node, option, selected }) {
   border-bottom: 1px solid #f5f5f5;
 }
 
-.filter-form { margin-bottom: 4px; }
+.filter-form { margin-bottom: 0; }
 .filter-form :deep(.n-form-item) { margin-bottom: 0; }
 
 @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }

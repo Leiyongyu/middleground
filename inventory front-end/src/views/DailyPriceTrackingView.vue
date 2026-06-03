@@ -3,7 +3,7 @@ import { h, onMounted, ref } from 'vue'
 import {
   NButton, NCard, NCheckbox, NDataTable, NForm, NFormItem, NInput, NSelect, NSpace, NTag, useMessage,
 } from 'naive-ui'
-import { fetchDailyPriceTracking, exportDailyPriceTracking } from '@/api/dailyPriceTracking'
+import { fetchDailyPriceTracking, exportDailyPriceTracking, saveRemark } from '@/api/dailyPriceTracking'
 import { fetchInventoryOverviewWarehouses } from '@/api/inventoryOverview'
 import { useDataTable } from '@/composables/useDataTable'
 
@@ -12,8 +12,13 @@ const message = useMessage()
 const { loading, records, total, query, filters, loadData, handleSearch, handleReset } = useDataTable(
   fetchDailyPriceTracking,
   { sku: '', brand: '', operator: '' },
-  { pageSize: 20, loadOnMount: false },
+  { pageSize: 100, loadOnMount: false },
 )
+
+// ===== 备注编辑状态（非受控 NInput 模式） =====
+const remarkInputs = {}  // key: "site|sku" → 当前输入值
+
+const tableMaxHeight = 450
 
 // ===== 仓库多选下拉（和补货页同一个接口） =====
 const warehouseLoading = ref(false)
@@ -137,16 +142,46 @@ const columns = [
     render: (row) => row.estimatedReplenish ?? '' },
   { title: '品牌', key: 'brand', width: 100 },
   { title: '操作员', key: 'operator', width: 100 },
-  { title: '备注', key: 'remark', width: 180, ellipsis: { tooltip: true },
-    render: (row) => row.remark || '' },
+  { title: '备注', key: 'remark', width: 200,
+    render: (row) => {
+      const key = `${row.site}|${row.sku}`
+      // 初始化：取已保存的备注作为初始值
+      if (!(key in remarkInputs)) {
+        remarkInputs[key] = row.remark || ''
+      }
+      return h(NInput, {
+        defaultValue: remarkInputs[key],
+        size: 'tiny',
+        placeholder: '输入备注，失焦自动保存',
+        clearable: true,
+        onUpdateValue: (v) => { remarkInputs[key] = v },
+        onBlur: async () => {
+          const newVal = remarkInputs[key] || ''
+          if (newVal === (row.remark || '')) return
+          try {
+            await saveRemark(row.site, row.sku, newVal)
+            row.remark = newVal
+            message.success('备注已保存')
+          } catch (e) {
+            message.error('保存失败')
+          }
+        },
+        onClear: () => {
+          remarkInputs[key] = ''
+          saveRemark(row.site, row.sku, '').catch(() => {})
+          row.remark = ''
+        },
+      })
+    },
+  },
 ].map((c) => ({ ...c, resizable: true, minWidth: 70 }))
 
 const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
 </script>
 
 <template>
-  <section class="dashboard-page">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <div class="dashboard-page">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
       <h2 class="users-title" style="margin:0">每日跟价</h2>
       <NSpace>
         <NButton @click="doLoadData" :loading="loading">刷新</NButton>
@@ -154,7 +189,7 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
       </NSpace>
     </div>
 
-    <NCard size="small" class="dashboard-card" style="margin-bottom:16px">
+    <NCard size="small" class="dashboard-card" style="margin-bottom:6px">
       <NForm inline :model="filters" @keyup.enter="onSearch">
         <NFormItem label="站点">
           <NSelect
@@ -186,7 +221,8 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
       </NForm>
     </NCard>
 
-    <NCard size="small" class="dashboard-card">
+    <div class="table-card-wrap">
+    <NCard size="small">
       <template #header-extra>
         <NTag size="small" :bordered="false">共 {{ total }} 条</NTag>
       </template>
@@ -198,7 +234,7 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
         :data="records"
         :row-key="(row) => `${row.site || ''}|${row.sku || ''}`"
         :scroll-x="scrollX"
-        :max-height="510"
+        :max-height="tableMaxHeight"
         :pagination="{
           page: query.page,
           pageSize: query.size,
@@ -211,7 +247,89 @@ const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
         striped
       />
     </NCard>
-  </section>
+    </div>
+  </div>
 </template>
 
-<style scoped src="../assets/styles/user-management.css"></style>
+<style scoped>
+/* ===== 页面容器：flex 纵向布局 ===== */
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ===== 标题栏（不伸缩） ===== */
+.dashboard-page > div:first-child {
+  flex-shrink: 0;
+}
+
+/* ===== 筛选卡片（不伸缩） ===== */
+.dashboard-card {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dashboard-card :deep(.n-card-header) {
+  padding: 10px 16px 0;
+  font-weight: 600;
+  font-size: 15px;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.dashboard-card :deep(.n-card__content) {
+  padding: 8px 16px 12px;
+}
+
+/* ===== 表格卡片容器：填充剩余空间 ===== */
+.table-card-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card-wrap :deep(.n-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card-wrap :deep(.n-card__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 16px 12px;
+}
+
+.table-card-wrap :deep(.n-card-header) {
+  padding: 10px 16px 0;
+  font-weight: 600;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* ===== 表头样式（与补货页一致，居中） ===== */
+:deep(.n-data-table-th) {
+  background: #fafafa;
+  font-weight: 600;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.55);
+  text-align: center !important;
+}
+
+:deep(.n-data-table-td) {
+  font-size: 13px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+/* ===== 标题 ===== */
+.users-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: -0.01em;
+}
+</style>
