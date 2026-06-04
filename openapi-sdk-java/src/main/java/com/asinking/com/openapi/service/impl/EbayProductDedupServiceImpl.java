@@ -7,11 +7,14 @@ import com.asinking.com.openapi.service.EbayProductDedupService;
 import com.asinking.com.openapi.service.EbayProductListingService;
 import com.asinking.com.openapi.utils.InventoryUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.io.ByteArrayInputStream;
 import java.util.*;
 
 @Service
@@ -133,6 +136,133 @@ public class EbayProductDedupServiceImpl implements EbayProductDedupService {
                         StringUtils.hasText(e.getRemark()) ? e.getRemark() : "");
             }
         }
+        return result;
+    }
+
+    @Override
+    public void saveTrackingCalc(String site, String sku, java.math.BigDecimal trackingPrice,
+                                  java.math.BigDecimal profitMargin, java.math.BigDecimal floorPrice) {
+        EbayProductDedupEntity e = mapper.selectOne(
+                new LambdaQueryWrapper<EbayProductDedupEntity>()
+                        .eq(EbayProductDedupEntity::getSite, site)
+                        .eq(EbayProductDedupEntity::getSku, sku));
+        if (e != null) {
+            e.setTrackingPrice(trackingPrice);
+            e.setTrackingProfitMargin(profitMargin);
+            e.setFloorPrice(floorPrice);
+            mapper.updateById(e);
+        }
+    }
+
+    @Override
+    public Map<String, java.math.BigDecimal> batchGetTrackingProfitMargins() {
+        Map<String, java.math.BigDecimal> result = new LinkedHashMap<>();
+        for (EbayProductDedupEntity e : mapper.selectList(null)) {
+            if (StringUtils.hasText(e.getSite()) && StringUtils.hasText(e.getSku()) && e.getTrackingProfitMargin() != null) {
+                result.put(e.getSite() + "|" + e.getSku(), e.getTrackingProfitMargin());
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public Map<String, java.math.BigDecimal> batchGetFloorPrices() {
+        Map<String, java.math.BigDecimal> result = new LinkedHashMap<>();
+        for (EbayProductDedupEntity e : mapper.selectList(null)) {
+            if (StringUtils.hasText(e.getSite()) && StringUtils.hasText(e.getSku()) && e.getFloorPrice() != null) {
+                result.put(e.getSite() + "|" + e.getSku(), e.getFloorPrice());
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public Map<String, java.math.BigDecimal> batchGetTrackingPrices() {
+        Map<String, java.math.BigDecimal> result = new LinkedHashMap<>();
+        for (EbayProductDedupEntity e : mapper.selectList(null)) {
+            if (StringUtils.hasText(e.getSite()) && StringUtils.hasText(e.getSku()) && e.getTrackingPrice() != null) {
+                result.put(e.getSite() + "|" + e.getSku(), e.getTrackingPrice());
+            }
+        }
+        return result;
+    }
+
+    private static final Map<String, String> SHEET_TO_SITE = new LinkedHashMap<>();
+    static {
+        SHEET_TO_SITE.put("US", "美国");
+        SHEET_TO_SITE.put("UK", "英国");
+        SHEET_TO_SITE.put("DE", "德国");
+    }
+
+    @Override
+    public Map<String, Integer> importProfitRate(byte[] fileBytes) {
+        // middleCode → { site → rate }
+        Map<String, Map<String, java.math.BigDecimal>> allRates = new LinkedHashMap<>();
+        int totalRows = 0;
+        try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(fileBytes))) {
+            DataFormatter df = new DataFormatter();
+            for (int s = 0; s < wb.getNumberOfSheets(); s++) {
+                Sheet sheet = wb.getSheetAt(s);
+                String sheetName = sheet.getSheetName().trim();
+                String site = SHEET_TO_SITE.get(sheetName);
+                if (site == null) site = SHEET_TO_SITE.get(sheetName.toUpperCase());
+                if (site == null) { LOG.warn("未知站点sheet: {}，跳过", sheetName); continue; }
+                Row hr = sheet.getRow(0);
+                if (hr == null) continue;
+                int colSku = -1, colRate = -1;
+                for (int c = 0; c < hr.getLastCellNum(); c++) {
+                    Cell cell = hr.getCell(c);
+                    if (cell == null) continue;
+                    String h = df.formatCellValue(cell).trim();
+                    if (h.equalsIgnoreCase("SKU") || h.contains("产品代码")) colSku = c;
+                    else if (h.equalsIgnoreCase("Profit") || h.contains("利润率")) colRate = c;
+                }
+                if (colSku < 0) colSku = 0;
+                if (colRate < 0) colRate = 1;
+                for (int r = 1; r <= sheet.getLastRowNum(); r++) {
+                    Row row = sheet.getRow(r);
+                    if (row == null) continue;
+                    String fullSku = df.formatCellValue(row.getCell(colSku)).trim();
+                    String rateStr = df.formatCellValue(row.getCell(colRate)).trim();
+                    if (fullSku.isEmpty() || rateStr.isEmpty()) continue;
+                    if (rateStr.endsWith("%")) {
+                        try { rateStr = new java.math.BigDecimal(rateStr.replace("%", "").trim())
+                                .divide(new java.math.BigDecimal("100"), 6, java.math.RoundingMode.HALF_UP).toString(); } catch (Exception ignored) {}
+                    }
+                    String mid = InventoryUtils.extractMiddleCodeForInventory(fullSku);
+                    if (mid.isEmpty()) mid = fullSku;
+                    try {
+                        allRates.computeIfAbsent(mid, k -> new LinkedHashMap<>())
+                                .put(site, new java.math.BigDecimal(rateStr));
+                        totalRows++;
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception e) { throw new RuntimeException("解析Excel失败: " + e.getMessage()); }
+
+        // 按 (site, middleCode) 匹配 ebay_product_dedup
+        Map<String, EbayProductDedupEntity> dedupByKey = new LinkedHashMap<>();
+        for (EbayProductDedupEntity ent : mapper.selectList(null)) {
+            if (ent.getSku() == null || ent.getSku().isEmpty() || ent.getSite() == null) continue;
+            String mid = InventoryUtils.extractMiddleCodeForInventory(ent.getSku());
+            if (!mid.isEmpty()) dedupByKey.put(ent.getSite() + "|" + mid, ent);
+        }
+        int updated = 0, skipped = 0;
+        for (Map.Entry<String, Map<String, java.math.BigDecimal>> entry : allRates.entrySet()) {
+            String mid = entry.getKey();
+            for (Map.Entry<String, java.math.BigDecimal> se : entry.getValue().entrySet()) {
+                EbayProductDedupEntity ent = dedupByKey.get(se.getKey() + "|" + mid);
+                if (ent != null) {
+                    ent.setProfitRate(se.getValue());
+                    mapper.updateById(ent);
+                    updated++;
+                } else { skipped++; }
+            }
+        }
+        Map<String, Integer> result = new LinkedHashMap<>();
+        result.put("total", totalRows);
+        result.put("updated", updated);
+        result.put("skipped", skipped);
         return result;
     }
 

@@ -30,6 +30,18 @@ public class EbayProductDedupEntity {
     @TableField("remark")
     private String remark;
 
+    @TableField("tracking_price")
+    private java.math.BigDecimal trackingPrice;
+
+    @TableField("tracking_profit_margin")
+    private java.math.BigDecimal trackingProfitMargin;
+
+    @TableField("floor_price")
+    private java.math.BigDecimal floorPrice;
+
+    @TableField("profit_rate")
+    private java.math.BigDecimal profitRate;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

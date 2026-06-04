@@ -5,6 +5,7 @@ import {
   NCard,
   NCheckbox,
   NDataTable,
+  NDropdown,
   NForm,
   NFormItem,
   NInput,
@@ -79,7 +80,7 @@ const replenishColumns = [
   { title: 'SKU', key: 'sku', width: 140, ellipsis: true, fixed: 'left' },
   { title: '产品名称', key: 'productName', width: 160, ellipsis: true, fixed: 'left' },
   { title: '近30利润', key: 'last30DaysProfit', width: 100,
-    render: (row) => row.last30DaysProfit ?? '' },
+    render: (row) => row.last30DaysProfit != null ? Number(row.last30DaysProfit).toFixed(1) + '%' : '' },
   { title: '退货率', key: 'returnRate', width: 90,
     render: (row) => row.returnRate ?? '' },
   { title: '海外在途', key: 'overseasOnway', width: 90,
@@ -232,12 +233,32 @@ async function handleUploadExcel() {
   input.click()
 }
 
-function handleExportGoodcangProducts() {
-  const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
-  const a = document.createElement('a')
-  a.href = `${base}/api/goodcang/export-product-list`
-  a.download = '谷仓商品列表.xlsx'
-  a.click()
+const importExportOptions = [
+  { label: '上传销量报表', key: 'uploadSales' },
+  { label: '上传利润率', key: 'uploadProfitRate' },
+]
+
+function handleUploadProfitRate() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.xlsx,.xls'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const resp = await fetch('/api/goodcang/import-profit-rate', { method: 'POST', body: form })
+      const data = await resp.json()
+      message.success('导入完成：共' + data.total + '条，更新' + data.updated + '，跳过' + data.skipped)
+    } catch (err) { message.error('导入失败') }
+  }
+  input.click()
+}
+
+function handleDropdownSelect(key) {
+  if (key === 'uploadSales') handleUploadExcel()
+  else if (key === 'uploadProfitRate') handleUploadProfitRate()
 }
 
 function handleReset() {
@@ -301,12 +322,9 @@ function renderWarehouseOption({ node, option, selected }) {
           <NButton v-if="isAdmin" size="small" type="warning" :loading="syncing" @click="handleSyncAll">
             拉取最新数据
           </NButton>
-          <NButton size="small" type="info" :loading="uploading" @click="handleUploadExcel">
-            上传销量报表
-          </NButton>
-          <NButton size="small" @click="handleExportGoodcangProducts">
-            导出谷仓商品
-          </NButton>
+          <NDropdown trigger="click" :options="importExportOptions" @select="handleDropdownSelect">
+            <NButton size="small" type="info">导入导出</NButton>
+          </NDropdown>
         </NSpace>
       </template>
 

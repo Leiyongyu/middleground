@@ -35,7 +35,7 @@ export function uploadDailyPriceTracking(file) {
 }
 
 /** 导出 Excel */
-export async function exportDailyPriceTracking({ site, sku, brand, operator } = {}) {
+export async function exportDailyPriceTracking({ site, sku, brand, operator, ids } = {}) {
   let token = ''
   try {
     const session = JSON.parse(localStorage.getItem('inventory-auth-session'))
@@ -47,6 +47,7 @@ export async function exportDailyPriceTracking({ site, sku, brand, operator } = 
   if (sku) params.set('sku', sku)
   if (brand) params.set('brand', brand)
   if (operator) params.set('operator', operator)
+  if (ids) params.set('ids', ids)
   const qs = params.toString()
   const url = `${base}/api/daily-price-tracking/export${qs ? '?' + qs : ''}`
   const resp = await fetch(url, {

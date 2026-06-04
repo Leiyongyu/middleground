@@ -1,6 +1,6 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
-import { NButton, NCard, NDataTable, NInput, NModal, NForm, NFormItem, NPopconfirm, NSpace, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NCard, NDataTable, NInput, NInputNumber, NModal, NForm, NFormItem, NPopconfirm, NSpace, NTag, useDialog, useMessage } from 'naive-ui'
 import { fetchLinkTemplates, saveLinkTemplate, deleteLinkTemplate } from '@/api/linkTemplates'
 
 const message = useMessage()
@@ -10,7 +10,7 @@ const records = ref([])
 
 const showModal = ref(false)
 const isNew = ref(false)
-const editForm = ref({ site: '', presaleUrl: '', soldUrl: '' })
+const editForm = ref({ site: '', presaleUrl: '', soldUrl: '', profitRate: null, exchangeRate: '' })
 const saving = ref(false)
 
 async function loadData() {
@@ -26,13 +26,14 @@ async function loadData() {
 
 function openAdd() {
   isNew.value = true
-  editForm.value = { site: '', presaleUrl: '', soldUrl: '' }
+  editForm.value = { site: '', presaleUrl: '', soldUrl: '', profitRate: null, exchangeRate: '' }
   showModal.value = true
 }
 
 function openEdit(row) {
   isNew.value = false
-  editForm.value = { site: row.site, presaleUrl: row.presaleUrl || '', soldUrl: row.soldUrl || '' }
+  editForm.value = { site: row.site, presaleUrl: row.presaleUrl || '', soldUrl: row.soldUrl || '',
+    profitRate: row.profitRate ? Number(row.profitRate) : null, exchangeRate: row.exchangeRate || '' }
   showModal.value = true
 }
 
@@ -40,7 +41,8 @@ async function submitSave() {
   if (!editForm.value.site.trim()) { message.warning('请输入站点'); return }
   saving.value = true
   try {
-    await saveLinkTemplate(editForm.value.site.trim(), editForm.value.presaleUrl, editForm.value.soldUrl)
+    await saveLinkTemplate(editForm.value.site.trim(), editForm.value.presaleUrl, editForm.value.soldUrl,
+      editForm.value.profitRate != null ? String(editForm.value.profitRate) : '', editForm.value.exchangeRate)
     message.success(isNew.value ? '已新增' : '已更新')
     showModal.value = false
     loadData()
@@ -70,7 +72,10 @@ function confirmDelete(row) {
 const columns = [
   { title: '站点', key: 'site', width: 100 },
   { title: '售前链接', key: 'presaleUrl', width: 400, ellipsis: { tooltip: true } },
-  { title: '售后链接', key: 'soldUrl', width: 400, ellipsis: { tooltip: true } },
+  { title: '售后链接', key: 'soldUrl', width: 350, ellipsis: { tooltip: true } },
+  { title: '目标利润率', key: 'profitRate', width: 90, align: 'center',
+    render: (row) => row.profitRate ? row.profitRate + '%' : '' },
+  { title: '实时汇率', key: 'exchangeRate', width: 90, align: 'center' },
   { title: '操作', key: 'actions', width: 140, align: 'center',
     render(row) {
       return h(NSpace, { size: 'small', justify: 'center' }, {
@@ -110,6 +115,12 @@ onMounted(() => loadData())
         </NFormItem>
         <NFormItem label="售后链接">
           <NInput v-model:value="editForm.soldUrl" placeholder="{oe} 占位符替换为 OE 号" />
+        </NFormItem>
+        <NFormItem label="目标利润率(%)">
+          <NInputNumber v-model:value="editForm.profitRate" :min="0" placeholder="如：8" style="width:100%" />
+        </NFormItem>
+        <NFormItem label="实时汇率">
+          <NInput v-model:value="editForm.exchangeRate" placeholder="如：9.2" style="width:100%" />
         </NFormItem>
       </NForm>
       <template #footer>

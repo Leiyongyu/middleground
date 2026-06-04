@@ -2,6 +2,7 @@ package com.asinking.com.openapi.service.impl;
 
 import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.service.EbayLinkTemplateService;
+
 import com.asinking.com.openapi.config.LingxingProperties;
 import com.asinking.com.openapi.dto.response.DailyPriceTrackingItem;
 import com.asinking.com.openapi.entity.*;
@@ -38,7 +39,6 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
     private final LowestPriceRecordService lowestPriceService;
     private final EbayProductDedupService dedupService;
     private final EbayLinkTemplateService linkTemplateService;
-
     public DailyPriceTrackingServiceImpl(LingxingProperties lingxingProperties,
                                          WarehouseService warehouseService,
                                          WarehouseInventoryDetailService inventoryService,
@@ -371,7 +371,21 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
             }
         }
 
-        // ==== 13. 批量填充备注（从 ebay_product_dedup 表） ====
+        // ==== 13. 跟卖价格/利润率/底线价 = ebay_product_dedup（按 site|sku 匹配） ====
+        Map<String, java.math.BigDecimal> tpMap = dedupService.batchGetTrackingPrices();
+        Map<String, java.math.BigDecimal> tmMap = dedupService.batchGetTrackingProfitMargins();
+        Map<String, java.math.BigDecimal> fpMap = dedupService.batchGetFloorPrices();
+        for (DailyPriceTrackingItem item : result) {
+            String key = item.getSite() + "|" + item.getSku();
+            java.math.BigDecimal tp = tpMap.get(key);
+            if (tp != null) item.setTrackingPrice(tp);
+            java.math.BigDecimal tm = tmMap.get(key);
+            if (tm != null) item.setTrackingProfitMargin(tm);
+            java.math.BigDecimal fp = fpMap.get(key);
+            if (fp != null) item.setFloorPrice(fp);
+        }
+
+        // ==== 14. 批量填充备注（从 ebay_product_dedup 表） ====
         if (!result.isEmpty()) {
             Map<String, String> remarkMap = dedupService.batchGetRemarks(
                     result.stream().map(r -> r.getSite() + "|" + r.getSku()).collect(Collectors.toList()));

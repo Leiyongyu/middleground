@@ -53,15 +53,24 @@ public class DailyPriceTrackingController {
         return Result.ok(service.page(page, size, site, sku, brand, operator));
     }
 
-    /** Excel 导出（导出当前筛选条件下的全部数据） */
+    /** Excel 导出（传 ids 则只导出选中，否则导出筛选条件下的全量） */
     @GetMapping("/export")
     public void export(@RequestParam(required = false) String site,
                        @RequestParam(required = false) String sku,
                        @RequestParam(required = false) String brand,
                        @RequestParam(required = false) String operator,
+                       @RequestParam(required = false) String ids,
                        HttpServletResponse response) throws Exception {
         PageResult<DailyPriceTrackingItem> result = service.page(1, Integer.MAX_VALUE, site, sku, brand, operator);
         List<DailyPriceTrackingItem> records = result.getRecords();
+
+        // 有 ids 则只保留选中的行（key=site|sku）
+        if (ids != null && !ids.isEmpty()) {
+            Set<String> idSet = new HashSet<>(Arrays.asList(ids.split(",")));
+            records = records.stream()
+                    .filter(r -> idSet.contains(r.getSite() + "|" + r.getSku()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
 
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("每日跟价");
@@ -135,10 +144,20 @@ public class DailyPriceTrackingController {
         String site = body.get("site");
         String presaleUrl = body.get("presaleUrl");
         String soldUrl = body.get("soldUrl");
+        String profitRateStr = body.get("profitRate");
+        String exchangeRateStr = body.get("exchangeRate");
         if (site == null || site.trim().isEmpty()) {
             return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "site 不能为空");
         }
-        linkTemplateService.save(site.trim(), presaleUrl, soldUrl);
+        Integer profitRate = null;
+        if (profitRateStr != null && !profitRateStr.trim().isEmpty()) {
+            try { profitRate = Integer.parseInt(profitRateStr.trim()); } catch (NumberFormatException ignored) {}
+        }
+        java.math.BigDecimal exchangeRate = null;
+        if (exchangeRateStr != null && !exchangeRateStr.trim().isEmpty()) {
+            try { exchangeRate = new java.math.BigDecimal(exchangeRateStr.trim()); } catch (NumberFormatException ignored) {}
+        }
+        linkTemplateService.save(site.trim(), presaleUrl, soldUrl, profitRate, exchangeRate);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("success", true);
         return Result.ok(data);
@@ -207,6 +226,8 @@ public class DailyPriceTrackingController {
             m.put("site", e.getSite());
             m.put("presaleUrl", e.getPresaleUrl() != null ? e.getPresaleUrl() : "");
             m.put("soldUrl", e.getSoldUrl() != null ? e.getSoldUrl() : "");
+            m.put("profitRate", e.getProfitRate() != null ? String.valueOf(e.getProfitRate()) : "");
+            m.put("exchangeRate", e.getExchangeRate() != null ? e.getExchangeRate().toString() : "");
             list.add(m);
         }
         return Result.ok(list);

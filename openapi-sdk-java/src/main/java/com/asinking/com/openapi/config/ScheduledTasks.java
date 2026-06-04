@@ -2,6 +2,7 @@ package com.asinking.com.openapi.config;
 
 import com.asinking.com.openapi.dto.response.SaleStatSyncResponse;
 import com.asinking.com.openapi.dto.response.WarehouseInventoryDetailSyncResponse;
+import com.asinking.com.openapi.service.GoodcangProductService;
 import com.asinking.com.openapi.service.GoodcangSyncService;
 import com.asinking.com.openapi.service.LingxingWarehouseInventoryService;
 import com.asinking.com.openapi.service.LingxingPurchaseOrderService;
@@ -11,6 +12,7 @@ import com.asinking.com.openapi.service.InventoryOverviewService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.time.LocalDate;
+import java.util.Map;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -25,19 +27,22 @@ public class ScheduledTasks {
     private final LingxingPurchaseOrderService purchaseOrderService;
     private final LingxingPurchasePlanQueryService purchasePlanQueryService;
     private final InventoryOverviewService overviewService;
+    private final GoodcangProductService goodcangProductService;
 
     public ScheduledTasks(LingxingWarehouseInventoryService inventoryService,
                           GoodcangSyncService goodcangSyncService,
                           LingxingWarehouseStatementService statementService,
                           LingxingPurchaseOrderService purchaseOrderService,
                           LingxingPurchasePlanQueryService purchasePlanQueryService,
-                          InventoryOverviewService overviewService) {
+                          InventoryOverviewService overviewService,
+                          GoodcangProductService goodcangProductService) {
         this.inventoryService = inventoryService;
         this.goodcangSyncService = goodcangSyncService;
         this.statementService = statementService;
         this.purchaseOrderService = purchaseOrderService;
         this.purchasePlanQueryService = purchasePlanQueryService;
         this.overviewService = overviewService;
+        this.goodcangProductService = goodcangProductService;
     }
 
     // ===== 每日定时同步（仅同步频繁变动的数据） =====
@@ -99,6 +104,19 @@ public class ScheduledTasks {
     @Scheduled(cron = "0 45 0 * * ?")
     public void refreshInventorySnapshot() {
         overviewService.refreshSnapshot();
+    }
+
+    /** 每周一凌晨 00:10 同步谷仓商品信息 */
+    @Scheduled(cron = "0 10 0 * * 1")
+    public void syncGoodcangProducts() {
+        LOG.info("==== 谷仓商品同步 开始 ====");
+        try {
+            long t = System.currentTimeMillis();
+            Map<String, Integer> r = goodcangProductService.syncFromApi();
+            LOG.info("[谷仓商品] 共{}条 新增{} 更新{} 耗时{}s", r.get("total"), r.get("inserted"), r.get("updated"), (System.currentTimeMillis() - t) / 1000);
+        } catch (Exception e) {
+            LOG.error("[谷仓商品] 失败", e);
+        }
     }
 
 }

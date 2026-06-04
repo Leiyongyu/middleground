@@ -21,4 +21,10 @@ public class EbayLinkTemplateEntity {
 
     @TableField("sold_url")
     private String soldUrl;
+
+    @TableField("profit_rate")
+    private Integer profitRate;
+
+    @TableField("exchange_rate")
+    private java.math.BigDecimal exchangeRate;
 }

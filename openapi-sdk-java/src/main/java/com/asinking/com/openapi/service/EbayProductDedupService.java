@@ -21,5 +21,17 @@ public interface EbayProductDedupService {
     /** 批量查询备注，返回 site|sku → remark */
     Map<String, String> batchGetRemarks(List<String> keys);
 
+    /** 保存跟卖价格+利润率+底线价 */
+    void saveTrackingCalc(String site, String sku, java.math.BigDecimal trackingPrice,
+                          java.math.BigDecimal profitMargin, java.math.BigDecimal floorPrice);
+
+    /** 批量查询跟卖价格/利润率/底线价，返回 site|sku → value */
+    Map<String, java.math.BigDecimal> batchGetTrackingPrices();
+    Map<String, java.math.BigDecimal> batchGetTrackingProfitMargins();
+    Map<String, java.math.BigDecimal> batchGetFloorPrices();
+
+    /** 从 Excel 导入利润率，按中间码精确匹配更新 profit_rate */
+    java.util.Map<String, Integer> importProfitRate(byte[] fileBytes);
+
     List<EbayProductDedupEntity> listAll();
 }

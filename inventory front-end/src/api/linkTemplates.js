@@ -4,8 +4,8 @@ export function fetchLinkTemplates() {
   return apiGet('/api/daily-price-tracking/link-templates')
 }
 
-export function saveLinkTemplate(site, presaleUrl, soldUrl) {
-  return apiPost('/api/daily-price-tracking/link-template', { site, presaleUrl, soldUrl })
+export function saveLinkTemplate(site, presaleUrl, soldUrl, profitRate, exchangeRate) {
+  return apiPost('/api/daily-price-tracking/link-template', { site, presaleUrl, soldUrl, profitRate, exchangeRate })
 }
 
 export function deleteLinkTemplate(site) {

@@ -1,7 +1,7 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
 import {
-  NButton, NCard, NCheckbox, NDataTable, NForm, NFormItem, NInput, NSelect, NSpace, NTag, useMessage,
+  NButton, NCard, NCheckbox, NDataTable, NDropdown, NForm, NFormItem, NInput, NSelect, NSpace, NTag, useMessage,
 } from 'naive-ui'
 import { fetchDailyPriceTracking, exportDailyPriceTracking, importLowestPrice, saveOe, saveRemark } from '@/api/dailyPriceTracking'
 import { fetchInventoryOverviewWarehouses } from '@/api/inventoryOverview'
@@ -75,6 +75,64 @@ function onReset() {
 }
 
 const importing = ref(false)
+const syncingGoodcang = ref(false)
+
+const importExportOptions = [
+  { label: '导入最低价', key: 'importPrice' },
+  { label: '上传商品单价', key: 'uploadPrice' },
+  { label: '同步谷仓商品', key: 'syncGoodcang' },
+]
+
+function handleDropdownSelect(key) {
+  if (key === 'importPrice') handleImportPrice()
+  else if (key === 'uploadPrice') handleUploadPrice()
+  else if (key === 'syncGoodcang') handleSyncGoodcangProducts()
+}
+const uploadingPrice = ref(false)
+
+async function handleUploadPrice() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.xlsx,.xls'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    uploadingPrice.value = true
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const resp = await fetch('/api/goodcang/import-price', { method: 'POST', body: form })
+      const data = await resp.json()
+      message.success(`导入完成：共${data.total}条，更新${data.updated}，跳过${data.skipped}`)
+    } catch (err) {
+      message.error('导入失败')
+    } finally {
+      uploadingPrice.value = false
+    }
+  }
+  input.click()
+}
+
+async function handleSyncGoodcangProducts() {
+  syncingGoodcang.value = true
+  try {
+    const resp = await fetch('/api/goodcang/sync-product', { method: 'POST' })
+    const data = await resp.json()
+    message.success(`同步完成：共${data.total}条，新增${data.inserted}，更新${data.updated}`)
+  } catch (e) {
+    message.error('同步失败')
+  } finally {
+    syncingGoodcang.value = false
+  }
+}
+
+function handleExportGoodcangProducts() {
+  const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
+  const a = document.createElement('a')
+  a.href = `${base}/api/goodcang/export-product-list`
+  a.download = '谷仓商品列表.xlsx'
+  a.click()
+}
 
 async function handleImportPrice() {
   const input = document.createElement('input')
@@ -99,13 +157,16 @@ async function handleImportPrice() {
 
 async function handleExport() {
   try {
+    // 有选中行则只导出选中，否则全量导出
+    const selected = checkedRowKeys.value.length > 0 ? checkedRowKeys.value : null
     await exportDailyPriceTracking({
       site: filters.site || undefined,
       sku: filters.sku.trim() || undefined,
       brand: filters.brand.trim() || undefined,
       operator: filters.operator.trim() || undefined,
+      ids: selected ? selected.join(',') : undefined,
     })
-    message.success('导出成功')
+    message.success(selected ? `已导出 ${selected.length} 条` : '导出成功')
   } catch (e) {
     message.error(e instanceof Error ? e.message : '导出失败')
   }
@@ -135,10 +196,37 @@ const columns = [
   { title: 'SKU', key: 'sku', width: 140, fixed: 'left', ellipsis: { tooltip: true } },
   { title: '最低价', key: 'ourLowestPrice', width: 90, align: 'center',
     render: (row) => row.ourLowestPrice ?? '' },
-  { title: '跟卖价格', key: 'trackingPrice', width: 100, align: 'center',
-    render: (row) => row.trackingPrice ?? '' },
+  { title: '跟卖价格', key: 'trackingPrice', width: 110, align: 'center',
+    render: (row) => {
+      const tpKey = 'tp_' + row.site + '|' + row.sku
+      if (!(tpKey in remarkInputs)) remarkInputs[tpKey] = row.trackingPrice ?? ''
+      return h(NInput, {
+        defaultValue: remarkInputs[tpKey] != null ? String(remarkInputs[tpKey]) : '',
+        size: 'tiny',
+        placeholder: '跟卖价',
+        onUpdateValue: (v) => { remarkInputs[tpKey] = v },
+        onBlur: async () => {
+          const v = remarkInputs[tpKey]
+          if (v === (row.trackingPrice != null ? String(row.trackingPrice) : '')) return
+          try {
+            const price = v && !isNaN(parseFloat(v)) ? v : ''
+            const resp = await fetch('/api/goodcang/calc-tracking', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ site: row.site, sku: row.sku, trackingPrice: price })
+            })
+            const data = await resp.json()
+            row.trackingPrice = data.trackingPrice
+            row.trackingProfitMargin = data.trackingProfitMargin
+            row.floorPrice = data.floorPrice
+            message.success('已保存')
+          } catch (e) { message.error('保存失败') }
+        },
+      })
+    },
+  },
   { title: '跟卖利润率', key: 'trackingProfitMargin', width: 100, align: 'center',
-    render: (row) => row.trackingProfitMargin != null ? row.trackingProfitMargin + '%' : '' },
+    render: (row) => row.trackingProfitMargin != null ? (row.trackingProfitMargin * 100).toFixed(1) + '%' : '' },
   { title: '底线价', key: 'floorPrice', width: 90, align: 'center',
     render: (row) => row.floorPrice ?? '' },
   { title: '退货率', key: 'returnRate', width: 80, align: 'center',
@@ -247,7 +335,9 @@ const checkedRowKeys = ref([])
       <NSpace>
         <NButton @click="doLoadData" :loading="loading">刷新</NButton>
         <NButton type="primary" @click="handleExport">导出 Excel</NButton>
-        <NButton type="warning" :loading="importing" @click="handleImportPrice">导入最低价</NButton>
+        <NDropdown trigger="click" :options="importExportOptions" @select="handleDropdownSelect">
+          <NButton type="primary">导入导出</NButton>
+        </NDropdown>
       </NSpace>
     </div>
 

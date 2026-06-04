@@ -428,6 +428,20 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 result.add(item);
             }
         }
+        // 填充近30天利润率（从 ebay_product_dedup.profit_rate，按站点+中间码匹配）
+        java.util.Map<String, java.math.BigDecimal> prMap = new java.util.LinkedHashMap<>();
+        for (com.asinking.com.openapi.entity.EbayProductDedupEntity dd : dedupService.listAll()) {
+            if (dd.getSite() != null && dd.getSku() != null && dd.getProfitRate() != null) {
+                String mid = InventoryUtils.extractMiddleCodeForInventory(dd.getSku());
+                if (!mid.isEmpty()) prMap.put(dd.getSite() + "|" + mid, dd.getProfitRate());
+            }
+        }
+        for (InventoryOverviewItem item : result) {
+            String mid = InventoryUtils.extractMiddleCode(item.getSku());
+            if (mid.isEmpty()) continue;
+            java.math.BigDecimal pr = prMap.get(item.getWarehouseNames() + "|" + mid);
+            if (pr != null) item.setLast30DaysProfit(pr.multiply(java.math.BigDecimal.valueOf(100)));
+        }
         return result;
     }
 

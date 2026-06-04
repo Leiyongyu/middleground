@@ -67,11 +67,13 @@ public class EbayLinkTemplateService {
     }
 
     /** 保存模板（新增或更新） */
-    public void save(String site, String presaleUrl, String soldUrl) {
+    public void save(String site, String presaleUrl, String soldUrl, Integer profitRate, java.math.BigDecimal exchangeRate) {
         EbayLinkTemplateEntity e = new EbayLinkTemplateEntity();
         e.setSite(site);
         e.setPresaleUrl(presaleUrl);
         e.setSoldUrl(soldUrl);
+        e.setProfitRate(profitRate);
+        e.setExchangeRate(exchangeRate);
         if (mapper.selectById(site) != null) {
             mapper.updateById(e);
         } else {
