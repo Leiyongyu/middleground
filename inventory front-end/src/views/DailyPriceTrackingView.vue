@@ -320,7 +320,7 @@ const columns = [
       })
     },
   },
-].map((c) => ({ ...c, resizable: true, minWidth: 70 }))
+].map((c) => ({ ...c, resizable: false, minWidth: 70 }))
 
 const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
 const checkedRowKeys = ref([])
