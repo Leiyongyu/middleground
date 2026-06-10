@@ -1,4 +1,5 @@
 package com.asinking.com.openapi.controller;
+import com.asinking.com.openapi.common.annotation.OperationLog;
 
 import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.common.response.Result;
@@ -208,6 +209,7 @@ public class DailyPriceTrackingController {
     }
 
     /** 导入最低价 Excel（按站点+SKU 保留最低价，增量 upsert） */
+    @OperationLog("导入")
     @PostMapping("/import-lowest-price")
     public Result<Map<String, Object>> importLowestPrice(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
         try {

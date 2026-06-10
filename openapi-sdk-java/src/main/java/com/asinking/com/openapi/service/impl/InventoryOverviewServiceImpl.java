@@ -377,7 +377,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
 
                 Integer mm = item.getMaxMonthlySales();
                 if (mm != null && mm > 0) {
-                    item.setMaxMonthlyReplenish((int) Math.max(0, Math.round(mm * 4.03 - item.getTotalInventory())));
+                    item.setMaxMonthlyReplenish((int) Math.round(mm * 4.03 - item.getTotalInventory()));
                 }
 
                 int d30 = item.getLast30DaysSales();
@@ -385,9 +385,6 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 item.setOverseasTotalRatio(divide(item.getOverseasTotal(), d30));
                 item.setTotalInventoryRatio(divide(item.getTotalInventory(), d30));
                 item.setOwner(matchOwner(baseSku, ownerByBrand));
-                // 计算 SKU 产品等级（按 站点+SKU 维度，和采购计划备注逻辑一致）
-                item.setSkuLevel(calcProductLevel(d30,
-                        item.getLast30DaysProfit() != null ? item.getLast30DaysProfit().doubleValue() : 0));
                 result.add(item);
             }
         }
@@ -399,11 +396,24 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 if (!mid.isEmpty()) prMap.put(dd.getSite() + "|" + mid, dd.getProfitRate());
             }
         }
+        // 填充退货率（从 ebay_product_dedup.return_rate，按站点+中间码匹配）
+        java.util.Map<String, java.math.BigDecimal> rrMap = new java.util.LinkedHashMap<>();
+        for (com.asinking.com.openapi.entity.EbayProductDedupEntity dd : dedupService.listAll()) {
+            if (dd.getSite() != null && dd.getSku() != null && dd.getReturnRate() != null) {
+                String mid = InventoryUtils.extractMiddleCodeForInventory(dd.getSku());
+                if (!mid.isEmpty()) rrMap.put(dd.getSite() + "|" + mid, dd.getReturnRate());
+            }
+        }
         for (InventoryOverviewItem item : result) {
             String mid = InventoryUtils.extractMiddleCode(item.getSku());
             if (mid.isEmpty()) continue;
             java.math.BigDecimal pr = prMap.get(item.getWarehouseNames() + "|" + mid);
             if (pr != null) item.setLast30DaysProfit(pr.multiply(java.math.BigDecimal.valueOf(100)));
+            java.math.BigDecimal rr = rrMap.get(item.getWarehouseNames() + "|" + mid);
+            if (rr != null) item.setReturnRate(rr);
+            // SKU等级：在利润填充之后计算
+            item.setSkuLevel(calcProductLevel(item.getLast30DaysSales(),
+                    item.getLast30DaysProfit() != null ? item.getLast30DaysProfit().doubleValue() : 0));
         }
         return result;
     }

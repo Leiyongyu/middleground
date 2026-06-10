@@ -1,6 +1,8 @@
 package com.asinking.com.openapi.controller;
 
+import com.asinking.com.openapi.common.annotation.OperationLog;
 import com.asinking.com.openapi.common.response.Result;
+import com.asinking.com.openapi.common.annotation.OperationLog;
 import com.asinking.com.openapi.entity.EbaySalesEntity;
 import com.asinking.com.openapi.mapper.mp.EbaySalesMapper;
 import com.asinking.com.openapi.service.InventoryOverviewService;
@@ -30,6 +32,7 @@ public class EbaySalesController {
     }
 
     /** 上传 eBay 销量 Excel 文件，解析并导入数据，按 (平台订单号+SKU) 去重更新。 */
+    @OperationLog("导入")
     @PostMapping("/upload")
     @Transactional
     public Result<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws Exception {

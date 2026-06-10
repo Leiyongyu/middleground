@@ -1,6 +1,7 @@
 package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.common.response.Result;
+import com.asinking.com.openapi.common.annotation.OperationLog;
 import com.asinking.com.openapi.entity.ProfitReportEntity;
 import com.asinking.com.openapi.mapper.mp.ProfitReportMapper;
 import com.asinking.com.openapi.utils.ExcelUtils;
@@ -30,6 +31,7 @@ public class ProfitReportUploadController {
     /**
      * 上传 Excel，按 (msku, ship_time, store_name, country_code) 增量 upsert。
      */
+    @OperationLog("导入")
     @PostMapping("/upload")
     @Transactional
     public Result<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws Exception {

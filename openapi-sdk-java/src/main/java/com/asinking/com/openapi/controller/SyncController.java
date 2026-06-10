@@ -1,6 +1,7 @@
 package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.common.response.Result;
+import com.asinking.com.openapi.common.annotation.OperationLog;
 import com.asinking.com.openapi.dto.request.WarehouseSyncRequest;
 import com.asinking.com.openapi.dto.response.WarehouseInventoryDetailSyncResponse;
 import com.asinking.com.openapi.dto.response.WarehouseSyncResponse;
@@ -56,6 +57,7 @@ public class SyncController {
     }
 
     /** 一键全量同步：仓库、库存、eBay商品、谷仓仓库/入库单、采购单、采购计划、库存流水，完成后刷新快照。 */
+    @OperationLog("同步")
     @PostMapping("/all")
     public Result<Map<String, Object>> syncAll() throws Exception {
         Map<String, Object> result = new LinkedHashMap<>();

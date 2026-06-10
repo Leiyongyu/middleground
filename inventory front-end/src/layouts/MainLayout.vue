@@ -104,6 +104,7 @@ const routeMap = {
   '/brand-owners': 'brandOwners',
   '/purchases': 'purchases',
   '/link-templates': 'linkTemplates',
+  '/operation-logs': 'operationLogs',
 }
 
 function handleMenuUpdate(key) {

@@ -1,6 +1,7 @@
 package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.common.response.Result;
+import com.asinking.com.openapi.common.annotation.OperationLog;
 import com.asinking.com.openapi.dto.response.InventoryOverviewItem;
 import com.asinking.com.openapi.dto.response.PurchasePlanCreateResponse;
 import com.asinking.com.openapi.entity.WarehouseEntity;
@@ -42,6 +43,7 @@ public class PurchasePlanController {
     }
 
     /** 上传 Excel 文件并创建采购计划。 */
+    @OperationLog("导入")
     @PostMapping("/upload")
     public Result<PurchasePlanCreateResponse> upload(@RequestParam("file") MultipartFile file) throws Exception {
         return Result.ok(service.uploadAndCreate(file));

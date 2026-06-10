@@ -79,11 +79,12 @@ function renderRatioTag(value) {
 const replenishColumns = [
   { title: '站点', key: 'warehouseNames', width: 180, ellipsis: true, fixed: 'left' },
   { title: 'SKU', key: 'sku', width: 140, ellipsis: true, fixed: 'left' },
+{ title: 'SKU等级', key: 'skuLevel', width: 80,    render: (row) => row.skuLevel ?? '' },
   { title: '产品名称', key: 'productName', width: 160, ellipsis: true, fixed: 'left' },
   { title: '近30利润', key: 'last30DaysProfit', width: 100,
     render: (row) => row.last30DaysProfit != null ? Number(row.last30DaysProfit).toFixed(1) + '%' : '' },
   { title: '退货率', key: 'returnRate', width: 90,
-    render: (row) => row.returnRate ?? '' },
+    render: (row) => row.returnRate != null ? (Number(row.returnRate) * 100).toFixed(1) + '%' : '' },
   { title: '海外在途', key: 'overseasOnway', width: 90,
     render: (row) => row.overseasOnway ?? '' },
   { title: '海外可售', key: 'overseasSellable', width: 90,
@@ -131,7 +132,7 @@ const replenishColumns = [
   { title: '采购数量', key: 'purchaseQuantity', width: 100,
     render: (row) => row.purchaseQuantity ?? '' },
   { title: '最大月销补货量', key: 'maxMonthlyReplenish', width: 130,
-    render: (row) => row.maxMonthlyReplenish ?? '' },
+    render: (row) => row.maxMonthlyReplenish != null ? row.maxMonthlyReplenish : 0 },
   { title: '负责人', key: 'owner', width: 100,
     render: (row) => row.owner ?? '' },
 ].map((c) => ({ ...c, resizable: true, minWidth: 70 }))

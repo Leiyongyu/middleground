@@ -1,4 +1,5 @@
 package com.asinking.com.openapi.controller;
+import com.asinking.com.openapi.common.annotation.OperationLog;
 
 import com.asinking.com.openapi.service.EbayLinkTemplateService;
 import com.asinking.com.openapi.service.EbayProductDedupService;
@@ -208,18 +209,21 @@ public class GoodcangCallbackController {
     }
 
     /** 导入近30天利润率 Excel（按中间码匹配更新 ebay_product_dedup.profit_rate） */
+    @OperationLog("导入")
     @PostMapping("/import-profit-rate")
     public Object importProfitRate(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws Exception {
         return dedupService.importProfitRate(file.getBytes());
     }
 
     /** 导入退货率 Excel（按中间码匹配更新 ebay_product_dedup.return_rate） */
+    @OperationLog("导入")
     @PostMapping("/import-return-rate")
     public Object importReturnRate(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws Exception {
         return dedupService.importReturnRate(file.getBytes());
     }
 
     /** 导入商品单价 Excel（按 middle_code 匹配更新 price） */
+    @OperationLog("导入")
     @PostMapping("/import-price")
     public Map<String, Object> importPrice(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) throws Exception {
         Map<String, Integer> stats = productService.importPriceFromExcel(file.getBytes());
@@ -232,6 +236,7 @@ public class GoodcangCallbackController {
     }
 
     /** 同步谷仓商品到数据库（按中间码清洗，增量 upsert） */
+    @OperationLog("同步")
     @PostMapping("/sync-product")
     public Object syncProduct() {
         return productService.syncFromApi();
