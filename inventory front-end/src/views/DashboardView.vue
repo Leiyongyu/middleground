@@ -84,7 +84,8 @@ function openFilter(key, e) {
   filterField.value = key
   filterInputVal.value = ''
   filterSearchResults.value = []
-  filterChecked.value = filterField.value === key && filterValue.value
+	// 数值字段使用运算符表达式（如 >14），不拆分为多选值
+	filterChecked.value = filterField.value === key && filterValue.value && !NUMERIC_FIELDS.has(key)
     ? filterValue.value.split(',').filter(Boolean) : []
   // 回显已有的筛选值
   if (filterValue.value) filterInputVal.value = filterValue.value
@@ -199,37 +200,37 @@ function renderRatioTag(value) {
 }
 
 const replenishColumns = [
-  { title: '站点', key: 'warehouseNames', width: 150, ellipsis: true, fixed: 'left' },
+  { title: '站点', key: 'warehouseNames', width: 110, ellipsis: true, fixed: 'left' },
   { title: 'SKU', key: 'sku', width: 150, ellipsis: true, fixed: 'left' },
-{ title: '等级', key: 'skuLevel', width: 100,    render: (row) => row.skuLevel ?? '' },
-  { title: '产品名称', key: 'productName', width: 160, ellipsis: true },
-  { title: '近30利润', key: 'last30DaysProfit', width: 100,
+  { title: '等级', key: 'skuLevel', width: 80, render: (row) => row.skuLevel ?? '' },
+  { title: '产品名称', key: 'productName', width: 180, ellipsis: true },
+  { title: '近30利润', key: 'last30DaysProfit', width: 130,
     render: (row) => row.last30DaysProfit != null ? Number(row.last30DaysProfit).toFixed(1) + '%' : '' },
-  { title: '退货率', key: 'returnRate', width: 90,
+  { title: '退货率', key: 'returnRate', width: 110,
     render: (row) => row.returnRate != null ? (Number(row.returnRate) * 100).toFixed(1) + '%' : '' },
-  { title: '海外在途', key: 'overseasOnway', width: 90,
+  { title: '海外在途', key: 'overseasOnway', width: 120,
     render: (row) => row.overseasOnway ?? '' },
-  { title: '海外可售', key: 'overseasSellable', width: 90,
+  { title: '海外可售', key: 'overseasSellable', width: 120,
     render: (row) => row.overseasSellable ?? '' },
-  { title: '海外总库存', key: 'overseasTotal', width: 100,
+  { title: '海外总', key: 'overseasTotal', width: 110,
     render: (row) => row.overseasTotal ?? '' },
-  { title: '采购待交付', key: 'purchasePendingDelivery', width: 100,
+  { title: '采购待交付', key: 'purchasePendingDelivery', width: 130,
     render: (row) => row.purchasePendingDelivery ?? '' },
-  { title: '成都可售', key: 'localSellable', width: 90,
+  { title: '成都可售', key: 'localSellable', width: 120,
     render: (row) => row.localSellable ?? '' },
-  { title: '成都在途', key: 'localOnway', width: 90,
+  { title: '成都在途', key: 'localOnway', width: 120,
     render: (row) => row.localOnway ?? '' },
-  { title: '采购计划', key: 'purchasePlan', width: 110, ellipsis: true,
+  { title: '采购计划', key: 'purchasePlan', width: 130,
     render: (row) => row.purchasePlan != null ? row.purchasePlan : 0 },
-  { title: '待出库', key: 'lockNum', width: 80,
+  { title: '待出库', key: 'lockNum', width: 110,
     render: (row) => row.lockNum ?? '' },
-  { title: '总库存', key: 'totalInventory', width: 90,
+  { title: '总库存', key: 'totalInventory', width: 110,
     render: (row) => row.totalInventory ?? '' },
-  { title: '近7天销量', key: 'last7DaysSales', width: 150,
+  { title: '近7天销量', key: 'last7DaysSales', width: 130,
     render: (row) => row.last7DaysSales ?? '' },
-  { title: '近30天销量', key: 'last30DaysSales', width: 150,
+  { title: '近30天销量', key: 'last30DaysSales', width: 140,
     render: (row) => row.last30DaysSales ?? '' },
-  { title: '近3月均销量', key: 'last90DaysSales', width: 150,
+  { title: '近3月均销量', key: 'last90DaysSales', width: 140,
     render: (row) => {
       if (row.last90DaysSales == null || row.last90DaysSales === '') return ''
       const v = Number(row.last90DaysSales)
@@ -239,21 +240,21 @@ const replenishColumns = [
     } },
   { title: '历史最大月销', key: 'maxMonthlySales', width: 150,
     render: (row) => row.maxMonthlySales ?? '' },
-  { title: '海外在库库销比', key: 'overseasInStockRatio', width: 150,
+  { title: '海外在库库销比', key: 'overseasInStockRatio', width: 160,
     render: (row) => renderRatioTag(row.overseasInStockRatio) },
   { title: '海外总库销比', key: 'overseasTotalRatio', width: 150,
     render: (row) => renderRatioTag(row.overseasTotalRatio) },
   { title: '总库存库销比', key: 'totalInventoryRatio', width: 150,
     render: (row) => renderRatioTag(row.totalInventoryRatio) },
-  { title: '最近成都出库', key: 'lastLocalOutboundTime', width: 150, ellipsis: true,
+  { title: '最近成都出库', key: 'lastLocalOutboundTime', width: 160, ellipsis: true,
     render: (row) => row.lastLocalOutboundTime ?? '' },
-  { title: '出库天数', key: 'outboundDays', width: 100,
+  { title: '出库天数', key: 'outboundDays', width: 130,
     render: (row) => row.outboundDays ?? '' },
-  { title: '采购周期', key: 'purchaseCycle', width: 120,
+  { title: '采购周期', key: 'purchaseCycle', width: 130,
     render: (row) => row.purchaseCycle ?? '' },
-  { title: '采购数量', key: 'purchaseQuantity', width: 100,
+  { title: '采购数量', key: 'purchaseQuantity', width: 130,
     render: (row) => row.purchaseQuantity ?? '' },
-  { title: '最大月销补货量', key: 'maxMonthlyReplenish', width: 150,
+  { title: '最大月销补货量', key: 'maxMonthlyReplenish', width: 170,
     render: (row) => row.maxMonthlyReplenish != null ? row.maxMonthlyReplenish : 0 },
   { title: '负责人', key: 'owner', width: 100,
     render: (row) => row.owner ?? '' },
@@ -261,7 +262,6 @@ const replenishColumns = [
   .map((c) => {
     if (!c.key) return c
     const needSort = NUMERIC_FIELDS.has(c.key)
-    if (!c.key) return c
     const origTitle = c.title
     c.title = () => h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px' } }, [
       renderFilterIcon(c.key),
