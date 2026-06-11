@@ -1,5 +1,5 @@
 <script setup>
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import {
   NButton, NCard, NCheckbox, NDataTable, NDrawer, NDrawerContent, NDropdown, NInput, NSpace, NTag, useMessage,
 } from 'naive-ui'
@@ -328,7 +328,7 @@ const checkedRowKeys = ref([])
           pageSize: query.size,
           itemCount: total,
           showSizePicker: true,
-          pageSizes: [10, 20, 50, 100],
+          pageSizes: [20, 50, 100, 200],
           onUpdatePage: (p) => { query.page = p; loadData() },
           onUpdatePageSize: (s) => { query.size = s; query.page = 1; loadData() },
         }"

@@ -32,8 +32,8 @@ public class InventoryOverviewItem {
     private int localOnway;
     /** 成都可售（可用量） */
     private int localSellable;
-    /** 采购计划（暂留空） */
-    private String purchasePlan;
+    /** 采购计划（待审批数量） */
+    private Integer purchasePlan;
     /** 待出库（可用锁定量） */
     private int lockNum;
     /** 整个周期总库存 = 海外在途 + 海外可售 + 成都在途 + 成都可售 */

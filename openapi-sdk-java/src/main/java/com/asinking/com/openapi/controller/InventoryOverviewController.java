@@ -38,10 +38,12 @@ public class InventoryOverviewController {
     public Result<PageResult<InventoryOverviewItem>> overview(
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "100") long size,
+            @RequestParam(required = false) String sortField,
+            @RequestParam(required = false) String sortOrder,
             HttpServletRequest request) {
         String userId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         String role = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ROLE));
-        return Result.ok(overviewService.pageOverview(page, size, null, null, userId, role));
+        return Result.ok(overviewService.pageOverview(page, size, null, null, userId, role, sortField, sortOrder));
     }
 
     /** 仅从本地DB重算快照，不拉取外部接口 */

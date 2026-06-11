@@ -64,7 +64,7 @@
  * @property {number}  purchasePendingDelivery
  * @property {number}  localOnway
  * @property {number}  localSellable
- * @property {string}  purchasePlan
+ * @property {number}  purchasePlan
  * @property {number}  lockNum
  * @property {number}  totalInventory
  * @property {number}  last7DaysSales

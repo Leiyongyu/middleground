@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, reactive, ref } from 'vue'
 import {
   NButton,
   NCard,
@@ -29,6 +29,50 @@ const importExportLoading = ref(false)
 let loadSeq = 0
 
 const replenishRows = ref([])
+const totalRecords = ref(0)
+const query = reactive({ page: 1, size: 100 })
+
+// ===== 列排序 =====
+const sortField = ref('')
+const sortOrder = ref('')  // '' | 'asc' | 'desc'
+const NUMERIC_FIELDS = new Set([
+  'last30DaysProfit', 'returnRate', 'overseasOnway', 'overseasSellable',
+  'overseasTotal', 'purchasePendingDelivery', 'localSellable', 'localOnway',
+  'lockNum', 'totalInventory', 'last7DaysSales', 'last30DaysSales',
+  'last90DaysSales', 'maxMonthlySales', 'overseasInStockRatio', 'overseasTotalRatio',
+  'totalInventoryRatio', 'outboundDays', 'purchaseCycle', 'purchaseQuantity',
+  'maxMonthlyReplenish', 'purchasePlan',
+])
+
+function handleSortClick(key) {
+  if (!NUMERIC_FIELDS.has(key)) return
+  if (sortField.value !== key) {
+    sortField.value = key; sortOrder.value = 'desc'
+  } else if (sortOrder.value === 'desc') {
+    sortOrder.value = 'asc'
+  } else if (sortOrder.value === 'asc') {
+    sortField.value = ''; sortOrder.value = ''
+  } else {
+    sortField.value = key; sortOrder.value = 'desc'
+  }
+  query.page = 1
+  loadInventoryOverview()
+}
+
+function renderSortIcon(key) {
+  if (!NUMERIC_FIELDS.has(key)) return ''
+  const isActive = sortField.value === key
+  const color = isActive && sortOrder.value ? '#1677ff' : '#bfbfbf'
+  const isAsc = isActive && sortOrder.value === 'asc'
+  const triangle = isAsc
+    ? 'M863.764 270.458c32.518-35.975 85.239-35.975 117.757 0l401.018 443.652c32.519 35.977 19.57 65.14-28.913 65.14h-861.969c-48.485 0-61.43-29.164-28.913-65.14l401.018-443.652z'
+    : 'M855.721 739.856c30.486 33.728 79.913 33.728 110.397 0l375.954-415.921c30.487-33.729 18.347-61.069-27.103-61.069h-808.099c-45.455 0-57.591 27.341-27.106 61.068l375.955 415.923z'
+  return h('svg', {
+    viewBox: '0 0 1824 1024', width: '12', height: '12',
+    style: { color, marginLeft: '2px', cursor: 'pointer', flexShrink: 0, verticalAlign: 'middle' },
+    onClick: (e) => { e.stopPropagation(); handleSortClick(key) },
+  }, [h('path', { fill: 'currentColor', d: triangle })])
+}
 
 function formatDateTime(value) {
   const date = value instanceof Date ? value : new Date(value)
@@ -89,7 +133,7 @@ const replenishColumns = [
   { title: '成都在途', key: 'localOnway', width: 90,
     render: (row) => row.localOnway ?? '' },
   { title: '采购计划', key: 'purchasePlan', width: 110, ellipsis: true,
-    render: (row) => row.purchasePlan ?? '' },
+    render: (row) => row.purchasePlan != null ? row.purchasePlan : 0 },
   { title: '待出库', key: 'lockNum', width: 80,
     render: (row) => row.lockNum ?? '' },
   { title: '总库存', key: 'totalInventory', width: 90,
@@ -127,6 +171,15 @@ const replenishColumns = [
   { title: '负责人', key: 'owner', width: 100,
     render: (row) => row.owner ?? '' },
 ].map((c) => ({ ...c, resizable: true, minWidth: 70 }))
+  .map((c) => {
+    if (!c.key || !NUMERIC_FIELDS.has(c.key)) return c
+    const origTitle = c.title
+    c.title = () => h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, [
+      origTitle,
+      renderSortIcon(c.key),
+    ])
+    return c
+  })
 
 const replenishScrollX = replenishColumns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
 const replenishMaxHeight = 680
@@ -150,9 +203,12 @@ async function loadInventoryOverview() {
   const seq = ++loadSeq
 
   try {
-    const list = await fetchInventoryOverview()
+    const params = { page: query.page, size: query.size }
+    if (sortField.value) { params.sortField = sortField.value; params.sortOrder = sortOrder.value }
+    const list = await fetchInventoryOverview(params)
     if (seq !== loadSeq) return
     replenishRows.value = list?.records || (Array.isArray(list) ? list : [])
+    totalRecords.value = list?.total || 0
     updatedAt.value = formatDateTime(new Date())
   } catch (error) {
     if (seq !== loadSeq) return
@@ -292,7 +348,7 @@ function handleDropdownSelect(key) {
       <template #header-extra>
         <NSpace align="center" size="small">
           <NTag type="info" :bordered="false" size="small">更新 {{ updatedAt || '-' }}</NTag>
-          <NTag size="small" :bordered="false" type="default">共 {{ filteredRows.length }} 条</NTag>
+          <NTag size="small" :bordered="false" type="default">共 {{ totalRecords }} 条</NTag>
           <NButton size="small" secondary :loading="loading" @click="handleRecalc">
             <template #icon>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -314,6 +370,7 @@ function handleDropdownSelect(key) {
       </template>
 
       <NDataTable
+        remote
         :loading="loading"
         :columns="visibleColumns"
         :data="filteredRows"
@@ -321,7 +378,15 @@ function handleDropdownSelect(key) {
         :scroll-x="visibleScrollX"
         :max-height="replenishMaxHeight"
         :row-key="(row) => `${String(row?.warehouseNames ?? '').trim()}|${String(row?.sku ?? '').trim()}`"
-        :pagination="{ pageSize: 100 }"
+        :pagination="{
+          page: query.page,
+          pageSize: query.size,
+          itemCount: totalRecords,
+          showSizePicker: true,
+          pageSizes: [20, 50, 100, 200],
+          onUpdatePage: (p) => { query.page = p; loadInventoryOverview() },
+          onUpdatePageSize: (s) => { query.size = s; query.page = 1; loadInventoryOverview() },
+        }"
         striped
       />
     </NCard>

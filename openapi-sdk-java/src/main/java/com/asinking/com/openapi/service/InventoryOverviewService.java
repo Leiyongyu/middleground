@@ -27,7 +27,8 @@ public interface InventoryOverviewService {
     /**
      * 分页查询库存概览。
      */
-    PageResult<InventoryOverviewItem> pageOverview(long page, long size, String sku, String warehouse, String userId, String role);
+    PageResult<InventoryOverviewItem> pageOverview(long page, long size, String sku, String warehouse, String userId, String role,
+                                                   String sortField, String sortOrder);
 
     /**
      * 全量重算运营数据并写入数据库，供定时任务和手动刷新调用。

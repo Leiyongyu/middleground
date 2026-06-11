@@ -13,7 +13,7 @@ public class InventoryOverviewEntity {
     private BigDecimal last30DaysProfit; private BigDecimal returnRate;
     private Integer overseasOnway; private Integer overseasSellable; private Integer overseasTotal;
     private Integer purchasePendingDelivery; private Integer localSellable; private Integer localOnway;
-    private String purchasePlan; private Integer lockNum; private Integer totalInventory;
+    private Integer purchasePlan; private Integer lockNum; private Integer totalInventory;
     private Integer last7DaysSales; private Integer last30DaysSales; private Integer last90DaysSales;
     private Integer maxMonthlySales;
     private BigDecimal overseasInStockRatio; private BigDecimal overseasTotalRatio; private BigDecimal totalInventoryRatio;

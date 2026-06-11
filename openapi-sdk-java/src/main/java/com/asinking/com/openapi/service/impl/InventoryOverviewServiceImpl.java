@@ -86,8 +86,15 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
 
     @Override
     public PageResult<InventoryOverviewItem> pageOverview(long page, long size, String sku, String warehouse,
-                                                           String userId, String role) {
+                                                           String userId, String role,
+                                                           String sortField, String sortOrder) {
         List<InventoryOverviewItem> filtered = filterOverview(sku, warehouse, userId, role);
+        // 排序
+        if (StringUtils.hasText(sortField) && StringUtils.hasText(sortOrder)) {
+            boolean asc = "asc".equalsIgnoreCase(sortOrder.trim());
+            Comparator<InventoryOverviewItem> cmp = getComparator(sortField.trim(), asc);
+            if (cmp != null) filtered.sort(cmp);
+        }
         long p = page <= 0 ? 1 : page;
         long s = size <= 0 ? 20 : Math.min(size, 200);
         long total = filtered.size();
@@ -95,6 +102,45 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         if (from >= total) return new PageResult<>(total, p, s, Collections.emptyList());
         long to = Math.min(from + s, total);
         return new PageResult<>(total, p, s, filtered.subList((int) from, (int) to));
+    }
+
+    private Comparator<InventoryOverviewItem> getComparator(String field, boolean asc) {
+        java.util.function.Function<InventoryOverviewItem, Comparable> getter;
+        switch (field) {
+            case "warehouseNames": getter = InventoryOverviewItem::getWarehouseNames; break;
+            case "sku": getter = InventoryOverviewItem::getSku; break;
+            case "skuLevel": getter = InventoryOverviewItem::getSkuLevel; break;
+            case "productName": getter = InventoryOverviewItem::getProductName; break;
+            case "last30DaysProfit": getter = i -> i.getLast30DaysProfit(); break;
+            case "returnRate": getter = i -> i.getReturnRate(); break;
+            case "overseasOnway": getter = i -> i.getOverseasOnway(); break;
+            case "overseasSellable": getter = i -> i.getOverseasSellable(); break;
+            case "overseasTotal": getter = i -> i.getOverseasTotal(); break;
+            case "purchasePendingDelivery": getter = i -> i.getPurchasePendingDelivery(); break;
+            case "localSellable": getter = i -> i.getLocalSellable(); break;
+            case "localOnway": getter = i -> i.getLocalOnway(); break;
+            case "lockNum": getter = i -> i.getLockNum(); break;
+            case "totalInventory": getter = i -> i.getTotalInventory(); break;
+            case "last7DaysSales": getter = i -> i.getLast7DaysSales(); break;
+            case "last30DaysSales": getter = i -> i.getLast30DaysSales(); break;
+            case "last90DaysSales": getter = i -> i.getLast90DaysSales(); break;
+            case "maxMonthlySales": getter = i -> i.getMaxMonthlySales(); break;
+            case "overseasInStockRatio": getter = i -> i.getOverseasInStockRatio(); break;
+            case "overseasTotalRatio": getter = i -> i.getOverseasTotalRatio(); break;
+            case "totalInventoryRatio": getter = i -> i.getTotalInventoryRatio(); break;
+            case "outboundDays": getter = i -> i.getOutboundDays(); break;
+            case "purchaseCycle": getter = i -> i.getPurchaseCycle(); break;
+            case "purchaseQuantity": getter = i -> i.getPurchaseQuantity(); break;
+            case "maxMonthlyReplenish": getter = i -> i.getMaxMonthlyReplenish(); break;
+            case "lastLocalOutboundTime": getter = InventoryOverviewItem::getLastLocalOutboundTime; break;
+            case "owner": getter = InventoryOverviewItem::getOwner; break;
+            case "purchasePlan": getter = InventoryOverviewItem::getPurchasePlan; break;
+            default: return null;
+        }
+        Comparator<InventoryOverviewItem> cmp = asc
+                ? Comparator.comparing(getter, Comparator.nullsLast(Comparator.naturalOrder()))
+                : Comparator.comparing(getter, Comparator.nullsLast(Comparator.reverseOrder()));
+        return cmp;
     }
 
     @Override
@@ -351,10 +397,10 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 if (pc != null) item.setPurchaseCycle(pc);
 
                 item.setPurchasePendingDelivery(purchasePendingMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
-                item.setPurchasePlan(String.valueOf(purchasePlanCountMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0)));
+                item.setPurchasePlan(purchasePlanCountMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
 
                 Integer cycle = item.getPurchaseCycle(), od = item.getOutboundDays();
-                int planCount = parsePlanCount(item.getPurchasePlan());
+                int planCount = item.getPurchasePlan() != null ? item.getPurchasePlan() : 0;
                 boolean allLe2 = item.getPurchasePendingDelivery() <= 2 && item.getLocalSellable() <= 2
                         && item.getLocalOnway() <= 2 && planCount <= 2 && item.getLockNum() <= 2;
                 boolean canCalc = allLe2 ? (cycle != null && od != null) : (cycle != null);
@@ -491,6 +537,5 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         e.setOwner(i.getOwner()); return e;
     }
 
-    private int parsePlanCount(String plan) { if (plan == null || plan.isEmpty()) return 0; try { return Integer.parseInt(plan); } catch (NumberFormatException e) { return 0; } }
     private int nvl(Integer v) { return v != null ? v : 0; }
 }
