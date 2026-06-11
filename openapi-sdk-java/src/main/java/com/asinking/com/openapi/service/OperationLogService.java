@@ -18,6 +18,14 @@ public class OperationLogService {
     public void log(String apiPath, String httpMethod, String operator, String ipAddress,
                     String operationType, String target, String status,
                     Integer total, Integer success, Integer fail, String error) {
+        log(apiPath, httpMethod, operator, ipAddress, operationType, target, status,
+                total, success, fail, error, null);
+    }
+
+    /** 写入含详细JSON的完整日志 */
+    public void log(String apiPath, String httpMethod, String operator, String ipAddress,
+                    String operationType, String target, String status,
+                    Integer total, Integer success, Integer fail, String error, String details) {
         OperationLogEntity e = new OperationLogEntity();
         e.setApiPath(apiPath);
         e.setHttpMethod(httpMethod);
@@ -31,6 +39,7 @@ public class OperationLogService {
         e.setFailCount(fail);
         if (error != null && error.length() > 500) error = error.substring(0, 500);
         e.setErrorMessage(error);
+        e.setDetails(details);
         e.setCreateTime(LocalDateTime.now());
         mapper.insert(e);
     }

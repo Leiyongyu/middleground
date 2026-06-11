@@ -221,13 +221,14 @@ public class DailyPriceTrackingController {
     @PostMapping("/import-lowest-price")
     public Result<Map<String, Object>> importLowestPrice(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
         try {
-            Map<String, Integer> stats = lowestPriceService.importFromExcel(
+            Map<String, Object> stats = lowestPriceService.importFromExcel(
                     file.getBytes(), file.getOriginalFilename());
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("total", stats.get("total"));
             data.put("inserted", stats.get("inserted"));
             data.put("updated", stats.get("updated"));
             data.put("skipped", stats.get("skipped"));
+            data.put("skipDetails", stats.get("skipDetails"));
             return Result.ok(data);
         } catch (Exception e) {
             return Result.fail(com.asinking.com.openapi.common.response.ResultCode.SERVER_ERROR, e.getMessage());

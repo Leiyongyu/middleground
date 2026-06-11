@@ -13,10 +13,14 @@ import com.asinking.com.openapi.service.LingxingPurchasePlanQueryService;
 import com.asinking.com.openapi.service.LingxingEbayService;
 import com.asinking.com.openapi.service.GoodcangSyncService;
 import com.asinking.com.openapi.service.InventoryOverviewService;
+import com.asinking.com.openapi.service.OperationLogService;
+import com.asinking.com.openapi.utils.JwtTokenService;
+import com.alibaba.fastjson2.JSON;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -36,8 +40,10 @@ public class SyncController {
     private final LingxingEbayService ebayService;
     private final GoodcangSyncService goodcangSyncService;
     private final InventoryOverviewService overviewService;
+    private final OperationLogService logService;
+    private final HttpServletRequest request;
+    private final JwtTokenService jwtTokenService;
 
-    /** 构造器注入所有同步相关的服务。 */
     public SyncController(LingxingWarehouseService warehouseService,
                           LingxingWarehouseInventoryService inventoryService,
                           LingxingWarehouseStatementService statementService,
@@ -45,7 +51,10 @@ public class SyncController {
                           LingxingPurchasePlanQueryService purchasePlanQueryService,
                           LingxingEbayService ebayService,
                           GoodcangSyncService goodcangSyncService,
-                          InventoryOverviewService overviewService) {
+                          InventoryOverviewService overviewService,
+                          OperationLogService logService,
+                          JwtTokenService jwtTokenService,
+                          HttpServletRequest request) {
         this.warehouseService = warehouseService;
         this.inventoryService = inventoryService;
         this.statementService = statementService;
@@ -54,71 +63,147 @@ public class SyncController {
         this.ebayService = ebayService;
         this.goodcangSyncService = goodcangSyncService;
         this.overviewService = overviewService;
+        this.logService = logService;
+        this.jwtTokenService = jwtTokenService;
+        this.request = request;
     }
 
-    /** 一键全量同步：仓库、库存、eBay商品、谷仓仓库/入库单、采购单、采购计划、库存流水，完成后刷新快照。 */
-    @OperationLog("同步")
+    private String getCurrentUser() {
+        String auth = request.getHeader("Authorization");
+        if (auth != null && auth.startsWith("Bearer ")) {
+            try { return jwtTokenService.parse(auth.substring(7)).getPayload().getSubject(); }
+            catch (Exception ignored) {}
+        }
+        return "SYSTEM";
+    }
+
+    /** 一键全量同步：顺序调用各个外部接口，每步独立记日志。 */
     @PostMapping("/all")
     public Result<Map<String, Object>> syncAll() throws Exception {
         Map<String, Object> result = new LinkedHashMap<>();
         long totalStart = System.currentTimeMillis();
         LocalDate now = LocalDate.now();
+        String apiPath = "/api/sync/all";
+        String operator = getCurrentUser();
+        String ip = getClientIp();
 
         // 仓库
-        try { long t = System.currentTimeMillis();
+        result.put("warehouse", runStep("同步", "仓库", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             WarehouseSyncResponse r = warehouseService.syncOverseaWarehouses(new WarehouseSyncRequest());
-            result.put("warehouse", map("inserted", r.getInserted(), "updated", r.getUpdated(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("warehouse", error(e)); }
+            return map("inserted", r.getInserted(), "updated", r.getUpdated(), "elapsed", ms(t));
+        }));
 
         // eBay商品
-        try { long t = System.currentTimeMillis();
+        result.put("ebayItems", runStep("同步", "eBay商品", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             var r = ebayService.syncAllEbayItems(null);
-            result.put("ebayItems", map("total", r.getRemoteTotal(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("ebayItems", error(e)); }
+            return map("total", r.getRemoteTotal(), "elapsed", ms(t));
+        }));
 
         // 库存
-        try { long t = System.currentTimeMillis();
+        result.put("inventory", runStep("同步", "库存", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             WarehouseInventoryDetailSyncResponse r = inventoryService.syncAllInventoryDetails(null);
-            result.put("inventory", map("inserted", r.getInserted(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("inventory", error(e)); }
+            return map("inserted", r.getInserted(), "elapsed", ms(t));
+        }));
 
         // 谷仓仓库
-        try { long t = System.currentTimeMillis();
+        result.put("goodcangWarehouses", runStep("同步", "谷仓仓库", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             var r = goodcangSyncService.syncWarehouses();
-            result.put("goodcangWarehouses", map("inserted", r.getInserted(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("goodcangWarehouses", error(e)); }
+            return map("inserted", r.getInserted(), "elapsed", ms(t));
+        }));
 
-        // 谷仓入库单（从2026-01-01到当前）
-        try { long t = System.currentTimeMillis();
+        // 谷仓入库单
+        result.put("goodcangGrn", runStep("同步", "谷仓入库单", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             String to = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             var r = goodcangSyncService.syncGrn("2026-01-01 00:00:00", to);
-            result.put("goodcangGrn", map("inserted", r.getInserted(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("goodcangGrn", error(e)); }
+            return map("inserted", r.getInserted(), "elapsed", ms(t));
+        }));
 
         // 库存流水
-        try { long t = System.currentTimeMillis();
+        result.put("statement", runStep("同步", "库存流水", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             var r = statementService.syncStatements(now.minusDays(90).toString(), now.toString());
-            result.put("statement", map("inserted", r.getInserted(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("statement", error(e)); }
+            return map("inserted", r.getInserted(), "elapsed", ms(t));
+        }));
 
         // 采购单
-        try { long t = System.currentTimeMillis();
+        result.put("purchaseOrder", runStep("同步", "采购单", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             var r = purchaseOrderService.sync(now.minusDays(90).toString(), now.toString());
-            result.put("purchaseOrder", map("inserted", r.getInserted(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("purchaseOrder", error(e)); }
+            return map("inserted", r.getInserted(), "elapsed", ms(t));
+        }));
 
         // 采购计划
-        try { long t = System.currentTimeMillis();
+        result.put("purchasePlan", runStep("同步", "采购计划", apiPath, operator, ip, () -> {
+            long t = System.currentTimeMillis();
             var r = purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString());
-            result.put("purchasePlan", map("inserted", r.getInserted(), "elapsed", ms(t)));
-        } catch (Exception e) { result.put("purchasePlan", error(e)); }
+            return map("inserted", r.getInserted(), "elapsed", ms(t));
+        }));
 
         result.put("total_elapsed", (System.currentTimeMillis() - totalStart) / 1000 + "s");
-
-        // 同步完成后刷新运营数据快照
         try { overviewService.refreshSnapshot(); } catch (Exception ignored) {}
 
         return Result.ok(result);
+    }
+
+    /** 执行一个同步步骤并记日志（含详细JSON） */
+    private Map<String, Object> runStep(String opType, String target, String apiPath,
+                                         String operator, String ip, StepRunner runner) {
+        long start = System.currentTimeMillis();
+        try {
+            Map<String, Object> stepResult = runner.run();
+            int inserted = intVal(stepResult, "inserted");
+            int updated = intVal(stepResult, "updated");
+            int skipped = intVal(stepResult, "skipped");
+            int total = intVal(stepResult, "total");
+            int remoteTotal = intVal(stepResult, "remoteTotal");
+            String elapsed = (System.currentTimeMillis() - start) / 1000.0 + "s";
+            stepResult.put("elapsed", elapsed);
+
+            // 构建详细日志 JSON
+            Map<String, Object> details = new LinkedHashMap<>(stepResult);
+            details.put("step_target", target);
+            details.put("step_status", "成功");
+            details.put("step_elapsed", elapsed);
+
+            String status = skipped > 0 ? "成功(有跳过)" : "成功";
+            int failCount = skipped;
+            logService.log(apiPath, "POST", operator, ip, opType, target, status,
+                    total > 0 ? total : (inserted + updated + skipped),
+                    inserted + updated, failCount, null, JSON.toJSONString(details));
+            return stepResult;
+        } catch (Exception e) {
+            String elapsed = (System.currentTimeMillis() - start) / 1000.0 + "s";
+            Map<String, Object> details = new LinkedHashMap<>();
+            details.put("step_target", target);
+            details.put("step_status", "失败");
+            details.put("step_elapsed", elapsed);
+            details.put("error", e.getMessage());
+            logService.log(apiPath, "POST", operator, ip, opType, target,
+                    "失败", 0, 0, 0, e.getMessage(), JSON.toJSONString(details));
+            return error(e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface StepRunner { Map<String, Object> run() throws Exception; }
+
+    private int intVal(Map<String, Object> m, String key) {
+        Object v = m.get(key);
+        if (v instanceof Number) return ((Number) v).intValue();
+        return 0;
+    }
+
+    private String getClientIp() {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isEmpty()) return xff.split(",")[0].trim();
+        String xri = request.getHeader("X-Real-IP");
+        if (xri != null && !xri.isEmpty()) return xri;
+        return request.getRemoteAddr();
     }
 
     /** 同步仓库库存流水 */

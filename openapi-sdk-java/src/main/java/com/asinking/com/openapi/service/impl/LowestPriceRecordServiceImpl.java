@@ -28,17 +28,17 @@ public class LowestPriceRecordServiceImpl implements LowestPriceRecordService {
     }
 
     @Override
-    public Map<String, Integer> importFromExcel(byte[] fileBytes, String fileName) {
+    public Map<String, Object> importFromExcel(byte[] fileBytes, String fileName) {
         int inserted = 0, updated = 0, skipped = 0;
+        List<Map<String, Object>> skipDetails = new ArrayList<>(); // 跳过明细
 
         // 1. 解析 Excel → 按 (site, sku) 取最低价
-        Map<String, ExcelRow> lowestByKey = new LinkedHashMap<>(); // "site|sku" → ExcelRow
+        Map<String, ExcelRow> lowestByKey = new LinkedHashMap<>();
         try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(fileBytes))) {
             Sheet sheet = wb.getSheetAt(0);
             Row headerRow = sheet.getRow(0);
             if (headerRow == null) throw new IllegalArgumentException("Excel 文件无表头");
 
-            // 解析表头，找 SKU / 站点 / 价格 / Item Number 列索引
             int colSku = -1, colSite = -1, colPrice = -1, colItemNo = -1;
             for (int c = 0; c < headerRow.getLastCellNum(); c++) {
                 Cell cell = headerRow.getCell(c);
@@ -50,24 +50,33 @@ public class LowestPriceRecordServiceImpl implements LowestPriceRecordService {
                 else if ("Item Number".equalsIgnoreCase(h)) colItemNo = c;
             }
             if (colSku < 0 || colSite < 0 || colPrice < 0) {
-                throw new IllegalArgumentException("Excel 缺少必要列：SKU / 站点 / 价格，当前表头=" + getHeaders(headerRow));
+                throw new IllegalArgumentException("Excel 缺少必要列: SKU/站点/价格, 当前表头=" + getHeaders(headerRow));
             }
 
-            // 遍历数据行，按 (site, sku) 保留最低价
             for (int r = 1; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null) continue;
-                String sku = getCellStr(row, colSku);
-                String site = getCellStr(row, colSite);
+                int rowNum = r + 1;
+                String rawSku = getCellStr(row, colSku);
+                String rawSite = getCellStr(row, colSite);
                 String itemNo = getCellStr(row, colItemNo);
                 BigDecimal price = getCellDecimal(row, colPrice);
-                if (sku.isEmpty() || site.isEmpty() || price == null) continue;
 
-                // 清洗 SKU：OTH-230027-0310 → OTH-230027, 2PC-OTH-230027-0310 → 2PC-OTH-230027
-                sku = InventoryUtils.extractBaseSku(sku);
-                // 清洗站点：eBay汽配 → 美国
-                site = InventoryUtils.mapSiteName(site);
-                if (sku.isEmpty() || site.isEmpty()) continue;
+                if (rawSku.isEmpty() || rawSite.isEmpty() || price == null) {
+                    Map<String, Object> d = new LinkedHashMap<>();
+                    d.put("row", rowNum); d.put("rawSku", rawSku); d.put("rawSite", rawSite);
+                    d.put("reason", "SKU/站点/价格为空的无效行");
+                    skipDetails.add(d); skipped++; continue;
+                }
+
+                String sku = InventoryUtils.extractBaseSku(rawSku);
+                String site = InventoryUtils.mapSiteName(rawSite);
+                if (sku.isEmpty() || site.isEmpty()) {
+                    Map<String, Object> d = new LinkedHashMap<>();
+                    d.put("row", rowNum); d.put("rawSku", rawSku); d.put("rawSite", rawSite);
+                    d.put("reason", "SKU或站点无法识别: rawSku=" + rawSku + ", rawSite=" + rawSite);
+                    skipDetails.add(d); skipped++; continue;
+                }
 
                 String key = site + "|" + sku;
                 ExcelRow exist = lowestByKey.get(key);
@@ -88,14 +97,12 @@ public class LowestPriceRecordServiceImpl implements LowestPriceRecordService {
             }
         }
 
-        // 3. 增量 upsert（仅当新价格更低时才写）
+        // 3. 增量 upsert
         for (Map.Entry<String, ExcelRow> entry : lowestByKey.entrySet()) {
             String key = entry.getKey();
             ExcelRow row = entry.getValue();
             LowestPriceRecordEntity existing = existingMap.get(key);
-
             if (existing != null) {
-                // 已有记录：只在价格更低时更新
                 if (row.price.compareTo(existing.getLowestPrice()) < 0) {
                     existing.setLowestPrice(row.price);
                     existing.setItemNumber(row.itemNumber);
@@ -103,13 +110,15 @@ public class LowestPriceRecordServiceImpl implements LowestPriceRecordService {
                     mapper.updateById(existing);
                     updated++;
                 } else {
-                    skipped++;
+                    Map<String, Object> d = new LinkedHashMap<>();
+                    d.put("sku", row.sku); d.put("site", row.site); d.put("newPrice", row.price);
+                    d.put("existingPrice", existing.getLowestPrice());
+                    d.put("reason", "价格未更低，跳过: 新价=" + row.price + " >= 旧价=" + existing.getLowestPrice());
+                    skipDetails.add(d); skipped++;
                 }
             } else {
-                // 新记录：直接插入
                 LowestPriceRecordEntity entity = new LowestPriceRecordEntity();
-                entity.setSite(row.site);
-                entity.setSku(row.sku);
+                entity.setSite(row.site); entity.setSku(row.sku);
                 entity.setItemNumber(row.itemNumber);
                 entity.setLowestPrice(row.price);
                 entity.setUploadTime(LocalDateTime.now());
@@ -119,11 +128,12 @@ public class LowestPriceRecordServiceImpl implements LowestPriceRecordService {
         }
 
         LOG.info("最低价导入完成: {} 条, 新增{}, 更新{}, 跳过{}", fileName, inserted, updated, skipped);
-        Map<String, Integer> result = new LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", lowestByKey.size());
         result.put("inserted", inserted);
         result.put("updated", updated);
         result.put("skipped", skipped);
+        result.put("skipDetails", skipDetails);
         return result;
     }
 

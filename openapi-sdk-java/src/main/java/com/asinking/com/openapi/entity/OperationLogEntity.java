@@ -44,6 +44,9 @@ public class OperationLogEntity {
     @TableField("error_message")
     private String errorMessage;
 
+    @TableField("details")
+    private String details;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 }

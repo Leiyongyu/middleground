@@ -1,6 +1,6 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
-import { NButton, NCard, NDataTable, NTag, NSpace, useMessage } from 'naive-ui'
+import { NButton, NCard, NDataTable, NModal, NTag, NSpace, useMessage } from 'naive-ui'
 import { fetchOperationLogs } from '@/api/operationLogs'
 import { useDataTable } from '@/composables/useDataTable'
 
@@ -12,8 +12,22 @@ const { loading, records, total, query, loadData } = useDataTable(
   { pageSize: 20 },
 )
 
+const showDetail = ref(false)
+const detailContent = ref('')
+
+function openDetail(row) {
+  try {
+    const obj = typeof row.details === 'string' ? JSON.parse(row.details) : row.details
+    detailContent.value = JSON.stringify(obj, null, 2)
+  } catch {
+    detailContent.value = row.details || '(无详情)'
+  }
+  showDetail.value = true
+}
+
 function getStatusType(s) {
   if (s === '成功') return 'success'
+  if (s && s.startsWith('成功')) return 'warning'
   if (s === '失败') return 'error'
   return 'info'
 }
@@ -41,8 +55,14 @@ const columns = [
   { title: '成功数', key: 'successCount', width: 80, align: 'center' },
   { title: '失败数', key: 'failCount', width: 80, align: 'center' },
   { title: 'IP', key: 'ipAddress', width: 120 },
-  { title: '错误信息', key: 'errorMessage', width: 280, ellipsis: { tooltip: true },
+  { title: '错误信息', key: 'errorMessage', width: 200, ellipsis: { tooltip: true },
     render: (row) => row.errorMessage || '—' },
+  { title: '详情', key: 'details', width: 80, align: 'center',
+    render(row) {
+      if (!row.details) return '—'
+      return h(NButton, { size: 'tiny', text: true, type: 'info', onClick: () => openDetail(row) }, { default: () => '查看' })
+    },
+  },
 ]
 </script>
 
@@ -63,6 +83,8 @@ const columns = [
         :columns="columns"
         :data="records"
         :row-key="(row) => row.id"
+        :scroll-x="1800"
+        :max-height="600"
         :pagination="{
           page: query.page,
           pageSize: query.size,
@@ -74,5 +96,9 @@ const columns = [
         }"
       />
     </NCard>
+
+    <NModal v-model:show="showDetail" title="操作详情" preset="card" style="width:680px;max-height:80vh">
+      <pre style="max-height:55vh;overflow:auto;background:#f5f5f5;padding:12px;border-radius:4px;font-size:12px;white-space:pre-wrap;word-break:break-all">{{ detailContent }}</pre>
+    </NModal>
   </div>
 </template>

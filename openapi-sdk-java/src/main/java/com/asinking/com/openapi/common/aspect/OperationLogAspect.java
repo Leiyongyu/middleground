@@ -1,9 +1,10 @@
 package com.asinking.com.openapi.common.aspect;
 
+import com.alibaba.fastjson2.JSON;
 import com.asinking.com.openapi.common.annotation.OperationLog;
 import com.asinking.com.openapi.common.response.Result;
-import com.asinking.com.openapi.interceptor.JwtAuthInterceptor;
 import com.asinking.com.openapi.service.OperationLogService;
+import com.asinking.com.openapi.utils.JwtTokenService;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -16,6 +17,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.lang.reflect.Method;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -30,9 +32,11 @@ public class OperationLogAspect {
 
     private static final Logger LOG = LoggerFactory.getLogger(OperationLogAspect.class);
     private final OperationLogService logService;
+    private final JwtTokenService jwtTokenService;
 
-    public OperationLogAspect(OperationLogService logService) {
+    public OperationLogAspect(OperationLogService logService, JwtTokenService jwtTokenService) {
         this.logService = logService;
+        this.jwtTokenService = jwtTokenService;
     }
 
     @Around("@annotation(com.asinking.com.openapi.common.annotation.OperationLog)")
@@ -43,7 +47,7 @@ public class OperationLogAspect {
 
         String apiPath = "";
         String httpMethod = "";
-        String operator = "UNKNOWN";
+        String operator = "匿名";
         String ipAddress = "";
 
         try {
@@ -53,8 +57,12 @@ public class OperationLogAspect {
                 apiPath = req.getRequestURI();
                 httpMethod = req.getMethod();
                 ipAddress = getClientIp(req);
-                Object account = req.getAttribute(JwtAuthInterceptor.ATTR_ACCOUNT);
-                if (account != null) operator = String.valueOf(account);
+                // 直接从 Authorization header 解析用户，不依赖 JWT 拦截器
+                String auth = req.getHeader("Authorization");
+                if (auth != null && auth.startsWith("Bearer ")) {
+                    try { operator = jwtTokenService.parse(auth.substring(7)).getPayload().getSubject(); }
+                    catch (Exception ignored) {}
+                }
             }
         } catch (Exception ignored) {}
 
@@ -62,8 +70,9 @@ public class OperationLogAspect {
         try {
             Object result = joinPoint.proceed();
 
-            // 解析返回值中的计数
+            // 解析返回值中的计数和详情
             int total = 0, success = 0, fail = 0;
+            String details = null;
             try {
                 Object data = extractData(result);
                 if (data instanceof Map) {
@@ -72,20 +81,35 @@ public class OperationLogAspect {
                     success = intVal(m, "inserted", 0) + intVal(m, "updated", 0);
                     fail = intVal(m, "skipped", 0);
                     if (success == 0) success = intVal(m, "success_count", 0);
+                    // 提取详细日志
+                    Object skipDetails = m.get("skipDetails");
+                    if (skipDetails != null) {
+                        Map<String, Object> detailMap = new LinkedHashMap<>();
+                        detailMap.put("total", total);
+                        detailMap.put("inserted", intVal(m, "inserted", 0));
+                        detailMap.put("updated", intVal(m, "updated", 0));
+                        detailMap.put("skipped", fail);
+                        detailMap.put("skipDetails", skipDetails);
+                        details = JSON.toJSONString(detailMap);
+                    }
                 }
             } catch (Exception ignored) {}
 
+            String status = fail > 0 ? "成功(有跳过)" : "成功";
             String target = anno.target() != null && !anno.target().isEmpty() ? anno.target() : apiPath;
             logService.log(apiPath, httpMethod, operator, ipAddress,
-                    anno.value(), target, "成功", total, success, fail, null);
+                    anno.value(), target, status, total, success, fail, null, details);
             LOG.info("[AOP] {} {} {} -> success({}) fail({}) {}ms",
                     httpMethod, apiPath, anno.target(), success, fail, System.currentTimeMillis() - start);
 
             return result;
         } catch (Exception e) {
             String target = anno.target() != null && !anno.target().isEmpty() ? anno.target() : apiPath;
+            Map<String, Object> errDetail = new LinkedHashMap<>();
+            errDetail.put("error", e.getMessage());
+            errDetail.put("errorType", e.getClass().getSimpleName());
             logService.log(apiPath, httpMethod, operator, ipAddress,
-                    anno.value(), target, "失败", 0, 0, 0, e.getMessage());
+                    anno.value(), target, "失败", 0, 0, 0, e.getMessage(), JSON.toJSONString(errDetail));
             LOG.error("[AOP] {} {} {} -> FAIL: {} ({}ms)",
                     httpMethod, apiPath, anno.target(), e.getMessage(), System.currentTimeMillis() - start);
             throw e;
