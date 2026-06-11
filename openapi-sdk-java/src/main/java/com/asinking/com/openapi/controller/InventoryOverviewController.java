@@ -2,6 +2,7 @@ package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.common.response.Result;
+import com.asinking.com.openapi.dto.request.OverviewSearchRequest;
 import com.asinking.com.openapi.dto.response.InventoryOverviewItem;
 import com.asinking.com.openapi.interceptor.JwtAuthInterceptor;
 import com.asinking.com.openapi.service.InventoryOverviewService;
@@ -40,10 +41,33 @@ public class InventoryOverviewController {
             @RequestParam(defaultValue = "100") long size,
             @RequestParam(required = false) String sortField,
             @RequestParam(required = false) String sortOrder,
+            @RequestParam(required = false) String filterField,
+            @RequestParam(required = false) String filterValue,
             HttpServletRequest request) {
         String userId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         String role = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ROLE));
-        return Result.ok(overviewService.pageOverview(page, size, null, null, userId, role, sortField, sortOrder));
+        return Result.ok(overviewService.pageOverview(page, size, null, null, userId, role, sortField, sortOrder, filterField, filterValue));
+    }
+
+    /** POST 搜索接口，支持多字段筛选 */
+    @PostMapping("/search")
+    public Result<PageResult<InventoryOverviewItem>> search(
+            @RequestBody OverviewSearchRequest req,
+            HttpServletRequest request) {
+        String userId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
+        String role = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ROLE));
+        return Result.ok(overviewService.search(req, userId, role));
+    }
+
+    /** 搜索字段去重值（实时回显） */
+    @GetMapping("/distinct-values")
+    public Result<List<String>> distinctValues(
+            @RequestParam String field,
+            @RequestParam(defaultValue = "") String keyword,
+            HttpServletRequest request) {
+        String userId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
+        String role = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ROLE));
+        return Result.ok(overviewService.searchDistinctValues(field, keyword, userId, role));
     }
 
     /** 仅从本地DB重算快照，不拉取外部接口 */

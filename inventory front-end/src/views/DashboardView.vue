@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   NButton,
   NCard,
@@ -8,11 +8,13 @@ import {
   NDrawer,
   NDrawerContent,
   NDropdown,
+  NInput,
+  NPopover,
   NSpace,
   NTag,
   useMessage,
 } from 'naive-ui'
-import { fetchInventoryOverview, refreshSnapshot } from '@/api/inventoryOverview'
+import { searchInventoryOverview, fetchDistinctValues, refreshSnapshot } from '@/api/inventoryOverview'
 import { syncAll } from '@/api/sync'
 import { uploadEbaySales } from '@/api/ebaySales'
 import { useAuthStore } from '@/stores/auth'
@@ -44,6 +46,77 @@ const NUMERIC_FIELDS = new Set([
   'maxMonthlyReplenish', 'purchasePlan',
 ])
 
+// ===== 列筛选 =====
+const filterField = ref('')
+const filterValue = ref('')
+const filterInput = ref('')
+const filterChecked = ref([])  // 多选值
+const filterSearchResults = ref([])
+let filterTimer = null
+const showFilter = ref(false)
+const filterX = ref(0)
+const filterY = ref(0)
+const TEXT_FIELDS = new Set(['warehouseNames', 'sku', 'productName', 'skuLevel', 'lastLocalOutboundTime', 'owner'])
+
+watch(filterInput, (val) => {
+  if (!showFilter.value || !filterField.value) return
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(async () => {
+    if (!val || !val.trim()) { filterSearchResults.value = []; return }
+    try {
+      filterSearchResults.value = await fetchDistinctValues(filterField.value, val.trim()) || []
+    } catch { filterSearchResults.value = [] }
+  }, 200)
+})
+
+const distinctFilterValues = computed(() => {
+  if (!filterField.value) return []
+  const set = new Set()
+  for (const row of replenishRows.value) {
+    const v = row[filterField.value]
+    if (v != null && String(v).trim()) set.add(String(v).trim())
+  }
+  return [...set].sort().slice(0, 50)
+})
+
+function openFilter(key, e) {
+  filterField.value = key
+  filterInput.value = ''
+  filterSearchResults.value = []
+  filterChecked.value = filterField.value === key && filterValue.value
+    ? filterValue.value.split(',').filter(Boolean) : []
+  const rect = e.currentTarget.getBoundingClientRect()
+  filterX.value = rect.left
+  filterY.value = rect.bottom + 4
+  showFilter.value = true
+}
+function toggleFilterCheck(val) {
+  const idx = filterChecked.value.indexOf(val)
+  if (idx >= 0) filterChecked.value.splice(idx, 1)
+  else filterChecked.value.push(val)
+}
+function applyFilter() {
+  if (filterChecked.value.length) {
+    filterValue.value = filterChecked.value.join(',')
+  } else if (filterInput.value.trim()) {
+    filterValue.value = filterInput.value.trim()
+  } else {
+    filterValue.value = ''
+  }
+  showFilter.value = false
+  query.page = 1
+  loadInventoryOverview()
+}
+function clearFilter() {
+  filterField.value = ''
+  filterValue.value = ''
+  filterInput.value = ''
+  filterChecked.value = []
+  showFilter.value = false
+  query.page = 1
+  loadInventoryOverview()
+}
+
 function handleSortClick(key) {
   if (!NUMERIC_FIELDS.has(key)) return
   if (sortField.value !== key) {
@@ -59,6 +132,17 @@ function handleSortClick(key) {
   loadInventoryOverview()
 }
 
+function renderFilterIcon(key) {
+  if (!TEXT_FIELDS.has(key)) return ''
+  const isActive = filterField.value === key && filterValue.value
+  const color = isActive ? '#1677ff' : '#bfbfbf'
+  return h('svg', {
+    viewBox: '0 0 1024 1024', width: '12', height: '12',
+    style: { color, marginLeft: '0', cursor: 'pointer', flexShrink: 0 },
+    onClick: (e) => { e.stopPropagation(); openFilter(key, e) },
+  }, [h('path', { fill: 'currentColor', d: 'M911.2 128H112.8c-52.8 0-80 58.4-41.6 98.4L384 576v288c0 17.6 14.4 32 32 32h192c17.6 0 32-14.4 32-32V576l312.8-349.6c38.4-40 11.2-98.4-41.6-98.4z' })])
+}
+
 function renderSortIcon(key) {
   if (!NUMERIC_FIELDS.has(key)) return ''
   const isActive = sortField.value === key
@@ -69,7 +153,7 @@ function renderSortIcon(key) {
     : 'M855.721 739.856c30.486 33.728 79.913 33.728 110.397 0l375.954-415.921c30.487-33.729 18.347-61.069-27.103-61.069h-808.099c-45.455 0-57.591 27.341-27.106 61.068l375.955 415.923z'
   return h('svg', {
     viewBox: '0 0 1824 1024', width: '12', height: '12',
-    style: { color, marginLeft: '2px', cursor: 'pointer', flexShrink: 0, verticalAlign: 'middle' },
+    style: { color, marginLeft: '0', cursor: 'pointer', flexShrink: 0, verticalAlign: 'middle' },
     onClick: (e) => { e.stopPropagation(); handleSortClick(key) },
   }, [h('path', { fill: 'currentColor', d: triangle })])
 }
@@ -112,9 +196,9 @@ function renderRatioTag(value) {
 }
 
 const replenishColumns = [
-  { title: '站点', key: 'warehouseNames', width: 180, ellipsis: true, fixed: 'left' },
-  { title: 'SKU', key: 'sku', width: 140, ellipsis: true, fixed: 'left' },
-{ title: 'SKU等级', key: 'skuLevel', width: 80,    render: (row) => row.skuLevel ?? '' },
+  { title: '站点', key: 'warehouseNames', width: 150, ellipsis: true, fixed: 'left' },
+  { title: 'SKU', key: 'sku', width: 150, ellipsis: true, fixed: 'left' },
+{ title: '等级', key: 'skuLevel', width: 100,    render: (row) => row.skuLevel ?? '' },
   { title: '产品名称', key: 'productName', width: 160, ellipsis: true },
   { title: '近30利润', key: 'last30DaysProfit', width: 100,
     render: (row) => row.last30DaysProfit != null ? Number(row.last30DaysProfit).toFixed(1) + '%' : '' },
@@ -138,11 +222,11 @@ const replenishColumns = [
     render: (row) => row.lockNum ?? '' },
   { title: '总库存', key: 'totalInventory', width: 90,
     render: (row) => row.totalInventory ?? '' },
-  { title: '近7天销量', key: 'last7DaysSales', width: 90,
+  { title: '近7天销量', key: 'last7DaysSales', width: 150,
     render: (row) => row.last7DaysSales ?? '' },
-  { title: '近30天销量', key: 'last30DaysSales', width: 100,
+  { title: '近30天销量', key: 'last30DaysSales', width: 150,
     render: (row) => row.last30DaysSales ?? '' },
-  { title: '近3月均销量', key: 'last90DaysSales', width: 100,
+  { title: '近3月均销量', key: 'last90DaysSales', width: 150,
     render: (row) => {
       if (row.last90DaysSales == null || row.last90DaysSales === '') return ''
       const v = Number(row.last90DaysSales)
@@ -150,15 +234,15 @@ const replenishColumns = [
       const avg = v / 3
       return Number.isInteger(avg) ? String(avg) : avg.toFixed(2).replace(/\.?0+$/, '')
     } },
-  { title: '历史最大月销', key: 'maxMonthlySales', width: 120,
+  { title: '历史最大月销', key: 'maxMonthlySales', width: 150,
     render: (row) => row.maxMonthlySales ?? '' },
-  { title: '海外在库库销比', key: 'overseasInStockRatio', width: 120,
+  { title: '海外在库库销比', key: 'overseasInStockRatio', width: 150,
     render: (row) => renderRatioTag(row.overseasInStockRatio) },
-  { title: '海外总库销比', key: 'overseasTotalRatio', width: 120,
+  { title: '海外总库销比', key: 'overseasTotalRatio', width: 150,
     render: (row) => renderRatioTag(row.overseasTotalRatio) },
-  { title: '总库存库销比', key: 'totalInventoryRatio', width: 120,
+  { title: '总库存库销比', key: 'totalInventoryRatio', width: 150,
     render: (row) => renderRatioTag(row.totalInventoryRatio) },
-  { title: '最近成都出库', key: 'lastLocalOutboundTime', width: 160, ellipsis: true,
+  { title: '最近成都出库', key: 'lastLocalOutboundTime', width: 150, ellipsis: true,
     render: (row) => row.lastLocalOutboundTime ?? '' },
   { title: '出库天数', key: 'outboundDays', width: 100,
     render: (row) => row.outboundDays ?? '' },
@@ -166,18 +250,22 @@ const replenishColumns = [
     render: (row) => row.purchaseCycle ?? '' },
   { title: '采购数量', key: 'purchaseQuantity', width: 100,
     render: (row) => row.purchaseQuantity ?? '' },
-  { title: '最大月销补货量', key: 'maxMonthlyReplenish', width: 130,
+  { title: '最大月销补货量', key: 'maxMonthlyReplenish', width: 150,
     render: (row) => row.maxMonthlyReplenish != null ? row.maxMonthlyReplenish : 0 },
   { title: '负责人', key: 'owner', width: 100,
     render: (row) => row.owner ?? '' },
-].map((c) => ({ ...c, resizable: true, minWidth: 70 }))
+].map((c) => ({ ...c, resizable: false, minWidth: 70 }))
   .map((c) => {
-    if (!c.key || !NUMERIC_FIELDS.has(c.key)) return c
+    if (!c.key) return c
+    const needSort = NUMERIC_FIELDS.has(c.key)
+    const needFilter = TEXT_FIELDS.has(c.key)
+    if (!needSort && !needFilter) return c
     const origTitle = c.title
-    c.title = () => h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center' } }, [
+    c.title = () => h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px' } }, [
+      needFilter ? renderFilterIcon(c.key) : null,
       origTitle,
-      renderSortIcon(c.key),
-    ])
+      needSort ? renderSortIcon(c.key) : null,
+    ].filter(Boolean))
     return c
   })
 
@@ -203,9 +291,12 @@ async function loadInventoryOverview() {
   const seq = ++loadSeq
 
   try {
-    const params = { page: query.page, size: query.size }
-    if (sortField.value) { params.sortField = sortField.value; params.sortOrder = sortOrder.value }
-    const list = await fetchInventoryOverview(params)
+    const body = { page: query.page, size: query.size }
+    if (sortField.value) { body.sortField = sortField.value; body.sortOrder = sortOrder.value }
+    if (filterField.value && filterValue.value) {
+      body.filters = [{ field: filterField.value, value: filterValue.value }]
+    }
+    const list = await searchInventoryOverview(body)
     if (seq !== loadSeq) return
     replenishRows.value = list?.records || (Array.isArray(list) ? list : [])
     totalRecords.value = list?.total || 0
@@ -221,7 +312,14 @@ async function loadInventoryOverview() {
 onMounted(async () => {
   await initColConfig('dashboard')
   loadInventoryOverview()
+  document.addEventListener('click', onDocClick)
 })
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+})
+function onDocClick() {
+  if (showFilter.value) showFilter.value = false
+}
 
 async function handleRecalc() {
   loading.value = true
@@ -434,6 +532,40 @@ function handleDropdownSelect(key) {
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <!-- ===== 筛选弹窗 ===== -->
+    <Teleport to="body">
+      <div v-if="showFilter" class="filter-popover" :style="{ left: filterX + 'px', top: filterY + 'px' }" @click.stop>
+        <div class="filter-popover-inner">
+          <NInput
+            v-model:value="filterInput"
+            size="small"
+            placeholder="输入关键词模糊搜索..."
+            clearable
+            @keyup.enter="applyFilter()"
+            @clear="clearFilter"
+          />
+          <div v-if="!filterInput && distinctFilterValues.length" class="filter-distinct-list">
+            <div class="filter-distinct-title">当前页可选值</div>
+            <div v-for="v in distinctFilterValues" :key="v" class="filter-distinct-item">
+              <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
+              <span @click="toggleFilterCheck(v)" style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v }}</span>
+            </div>
+          </div>
+          <div v-if="filterInput && filterSearchResults.length" class="filter-distinct-list">
+            <div class="filter-distinct-title">全量匹配（{{ filterSearchResults.length }} 条）</div>
+            <div v-for="v in filterSearchResults" :key="v" class="filter-distinct-item">
+              <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
+              <span @click="toggleFilterCheck(v)" style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v }}</span>
+            </div>
+          </div>
+          <NSpace size="small" style="margin-top: 8px" justify="end">
+            <NButton size="tiny" @click="clearFilter">清除</NButton>
+            <NButton size="tiny" type="primary" @click="applyFilter()">确定</NButton>
+          </NSpace>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -613,5 +745,44 @@ function handleDropdownSelect(key) {
   color: #bbb;
   font-size: 14px;
   user-select: none;
+}
+
+/* ===== 筛选弹窗 ===== */
+.filter-popover {
+  position: fixed;
+  z-index: 2000;
+}
+.filter-popover-inner {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  padding: 12px;
+  min-width: 220px;
+  max-width: 300px;
+}
+.filter-distinct-list {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 8px;
+  border-top: 1px solid #eee;
+  padding-top: 4px;
+}
+.filter-distinct-title {
+  font-size: 11px;
+  color: #999;
+  padding: 4px 0;
+}
+.filter-distinct-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.filter-distinct-item:hover {
+  background: #e6f4ff;
+  color: #1677ff;
 }
 </style>

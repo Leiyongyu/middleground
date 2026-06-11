@@ -2,6 +2,7 @@ package com.asinking.com.openapi.service.impl;
 
 import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.config.LingxingProperties;
+import com.asinking.com.openapi.dto.request.OverviewSearchRequest;
 import com.asinking.com.openapi.dto.response.InventoryOverviewItem;
 import com.asinking.com.openapi.entity.*;
 import com.asinking.com.openapi.mapper.mp.*;
@@ -87,8 +88,27 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
     @Override
     public PageResult<InventoryOverviewItem> pageOverview(long page, long size, String sku, String warehouse,
                                                            String userId, String role,
-                                                           String sortField, String sortOrder) {
+                                                           String sortField, String sortOrder,
+                                                           String filterField, String filterValue) {
         List<InventoryOverviewItem> filtered = filterOverview(sku, warehouse, userId, role);
+        // 文本字段模糊筛选（支持逗号分隔多值精确匹配 + 单值模糊搜索）
+        if (StringUtils.hasText(filterField) && StringUtils.hasText(filterValue)) {
+            String raw = filterValue.trim();
+            if (raw.contains(",")) {
+                Set<String> vals = Arrays.stream(raw.split(",")).map(String::trim)
+                        .filter(StringUtils::hasText).map(String::toLowerCase).collect(Collectors.toSet());
+                filtered = filtered.stream().filter(item -> {
+                    String val = getTextField(item, filterField.trim());
+                    return val != null && vals.contains(val.toLowerCase());
+                }).collect(Collectors.toList());
+            } else {
+                String kw = raw.toLowerCase();
+                filtered = filtered.stream().filter(item -> {
+                    String val = getTextField(item, filterField.trim());
+                    return val != null && val.toLowerCase().contains(kw);
+                }).collect(Collectors.toList());
+            }
+        }
         // 排序
         if (StringUtils.hasText(sortField) && StringUtils.hasText(sortOrder)) {
             boolean asc = "asc".equalsIgnoreCase(sortOrder.trim());
@@ -102,6 +122,59 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         if (from >= total) return new PageResult<>(total, p, s, Collections.emptyList());
         long to = Math.min(from + s, total);
         return new PageResult<>(total, p, s, filtered.subList((int) from, (int) to));
+    }
+
+    @Override
+    public PageResult<InventoryOverviewItem> search(OverviewSearchRequest req, String userId, String role) {
+        List<InventoryOverviewItem> filtered = filterOverview(null, null, userId, role);
+        // 多字段筛选
+        if (req.getFilters() != null && !req.getFilters().isEmpty()) {
+            for (OverviewSearchRequest.FilterItem f : req.getFilters()) {
+                if (!StringUtils.hasText(f.getField()) || !StringUtils.hasText(f.getValue())) continue;
+                String raw = f.getValue().trim();
+                if (raw.contains(",")) {
+                    Set<String> vals = Arrays.stream(raw.split(",")).map(String::trim)
+                            .filter(StringUtils::hasText).map(String::toLowerCase).collect(Collectors.toSet());
+                    filtered = filtered.stream().filter(item -> {
+                        String val = getTextField(item, f.getField().trim());
+                        return val != null && vals.contains(val.toLowerCase());
+                    }).collect(Collectors.toList());
+                } else {
+                    String kw = raw.toLowerCase();
+                    filtered = filtered.stream().filter(item -> {
+                        String val = getTextField(item, f.getField().trim());
+                        return val != null && val.toLowerCase().contains(kw);
+                    }).collect(Collectors.toList());
+                }
+            }
+        }
+        // 排序
+        if (StringUtils.hasText(req.getSortField()) && StringUtils.hasText(req.getSortOrder())) {
+            boolean asc = "asc".equalsIgnoreCase(req.getSortOrder().trim());
+            Comparator<InventoryOverviewItem> cmp = getComparator(req.getSortField().trim(), asc);
+            if (cmp != null) filtered.sort(cmp);
+        }
+        // 分页
+        long p = req.getPage() <= 0 ? 1 : req.getPage();
+        long s = req.getSize() <= 0 ? 20 : Math.min(req.getSize(), 200);
+        long total = filtered.size();
+        long from = (p - 1) * s;
+        if (from >= total) return new PageResult<>(total, p, s, Collections.emptyList());
+        long to = Math.min(from + s, total);
+        return new PageResult<>(total, p, s, filtered.subList((int) from, (int) to));
+    }
+
+    @Override
+    public List<String> searchDistinctValues(String field, String keyword, String userId, String role) {
+        List<InventoryOverviewItem> all = filterOverview(null, null, userId, role);
+        String kw = StringUtils.hasText(keyword) ? keyword.trim().toLowerCase() : "";
+        return all.stream()
+                .map(item -> getTextField(item, field))
+                .filter(v -> v != null && !v.isEmpty() && (kw.isEmpty() || v.toLowerCase().contains(kw)))
+                .distinct()
+                .sorted()
+                .limit(50)
+                .collect(Collectors.toList());
     }
 
     private Comparator<InventoryOverviewItem> getComparator(String field, boolean asc) {
@@ -538,4 +611,17 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
     }
 
     private int nvl(Integer v) { return v != null ? v : 0; }
+
+    private String getTextField(InventoryOverviewItem item, String field) {
+        switch (field) {
+            case "warehouseNames": return item.getWarehouseNames();
+            case "sku": return item.getSku();
+            case "productName": return item.getProductName();
+            case "skuLevel": return item.getSkuLevel();
+            case "lastLocalOutboundTime": return item.getLastLocalOutboundTime();
+            case "owner": return item.getOwner();
+            case "purchasePlan": return item.getPurchasePlan() != null ? String.valueOf(item.getPurchasePlan()) : null;
+            default: return null;
+        }
+    }
 }

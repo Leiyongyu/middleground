@@ -1,6 +1,7 @@
 package com.asinking.com.openapi.service;
 
 import com.asinking.com.openapi.common.response.PageResult;
+import com.asinking.com.openapi.dto.request.OverviewSearchRequest;
 import com.asinking.com.openapi.dto.response.InventoryOverviewItem;
 import java.util.List;
 
@@ -28,7 +29,13 @@ public interface InventoryOverviewService {
      * 分页查询库存概览。
      */
     PageResult<InventoryOverviewItem> pageOverview(long page, long size, String sku, String warehouse, String userId, String role,
-                                                   String sortField, String sortOrder);
+                                                   String sortField, String sortOrder, String filterField, String filterValue);
+
+    /** POST 搜索接口 */
+    PageResult<InventoryOverviewItem> search(OverviewSearchRequest req, String userId, String role);
+
+    /** 搜索字段的去重值（实时回显） */
+    List<String> searchDistinctValues(String field, String keyword, String userId, String role);
 
     /**
      * 全量重算运营数据并写入数据库，供定时任务和手动刷新调用。
