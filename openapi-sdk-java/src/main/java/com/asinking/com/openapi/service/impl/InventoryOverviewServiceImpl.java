@@ -132,17 +132,40 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             for (OverviewSearchRequest.FilterItem f : req.getFilters()) {
                 if (!StringUtils.hasText(f.getField()) || !StringUtils.hasText(f.getValue())) continue;
                 String raw = f.getValue().trim();
+                String fieldName = f.getField().trim();
+                // 数值字段：尝试解析比较运算符（> < >= <= =）
+                if (isNumericField(fieldName)) {
+                    String[] parsed = parseNumericFilter(raw, isPercentageField(fieldName));
+                    if (parsed != null) {
+                        String op = parsed[0];
+                        double target = Double.parseDouble(parsed[1]);
+                        filtered = filtered.stream().filter(item -> {
+                            Double val = getNumericValue(item, fieldName);
+                            if (val == null) return false;
+                            switch (op) {
+                                case ">":  return val > target;
+                                case ">=": return val >= target;
+                                case "<":  return val < target;
+                                case "<=": return val <= target;
+                                case "=":  return Math.abs(val - target) < 1e-10;
+                                default:   return val.toString().toLowerCase().contains(raw.toLowerCase());
+                            }
+                        }).collect(Collectors.toList());
+                        continue;
+                    }
+                }
+                // 文本多选或模糊搜索
                 if (raw.contains(",")) {
                     Set<String> vals = Arrays.stream(raw.split(",")).map(String::trim)
                             .filter(StringUtils::hasText).map(String::toLowerCase).collect(Collectors.toSet());
                     filtered = filtered.stream().filter(item -> {
-                        String val = getTextField(item, f.getField().trim());
+                        String val = getTextField(item, fieldName);
                         return val != null && vals.contains(val.toLowerCase());
                     }).collect(Collectors.toList());
                 } else {
                     String kw = raw.toLowerCase();
                     filtered = filtered.stream().filter(item -> {
-                        String val = getTextField(item, f.getField().trim());
+                        String val = getTextField(item, fieldName);
                         return val != null && val.toLowerCase().contains(kw);
                     }).collect(Collectors.toList());
                 }
@@ -614,13 +637,98 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
 
     private String getTextField(InventoryOverviewItem item, String field) {
         switch (field) {
+            // 文本字段
             case "warehouseNames": return item.getWarehouseNames();
             case "sku": return item.getSku();
             case "productName": return item.getProductName();
             case "skuLevel": return item.getSkuLevel();
             case "lastLocalOutboundTime": return item.getLastLocalOutboundTime();
             case "owner": return item.getOwner();
+            // 数值字段 → 转字符串
             case "purchasePlan": return item.getPurchasePlan() != null ? String.valueOf(item.getPurchasePlan()) : null;
+            case "last30DaysProfit": return item.getLast30DaysProfit() != null ? item.getLast30DaysProfit().toString() : null;
+            case "returnRate": return item.getReturnRate() != null ? item.getReturnRate().toString() : null;
+            case "overseasOnway": return String.valueOf(item.getOverseasOnway());
+            case "overseasSellable": return String.valueOf(item.getOverseasSellable());
+            case "overseasTotal": return String.valueOf(item.getOverseasTotal());
+            case "purchasePendingDelivery": return String.valueOf(item.getPurchasePendingDelivery());
+            case "localSellable": return String.valueOf(item.getLocalSellable());
+            case "localOnway": return String.valueOf(item.getLocalOnway());
+            case "lockNum": return String.valueOf(item.getLockNum());
+            case "totalInventory": return String.valueOf(item.getTotalInventory());
+            case "last7DaysSales": return String.valueOf(item.getLast7DaysSales());
+            case "last30DaysSales": return String.valueOf(item.getLast30DaysSales());
+            case "last90DaysSales": return String.valueOf(item.getLast90DaysSales());
+            case "maxMonthlySales": return item.getMaxMonthlySales() != null ? String.valueOf(item.getMaxMonthlySales()) : null;
+            case "overseasInStockRatio": return item.getOverseasInStockRatio() != null ? item.getOverseasInStockRatio().toString() : null;
+            case "overseasTotalRatio": return item.getOverseasTotalRatio() != null ? item.getOverseasTotalRatio().toString() : null;
+            case "totalInventoryRatio": return item.getTotalInventoryRatio() != null ? item.getTotalInventoryRatio().toString() : null;
+            case "outboundDays": return item.getOutboundDays() != null ? String.valueOf(item.getOutboundDays()) : null;
+            case "purchaseCycle": return item.getPurchaseCycle() != null ? String.valueOf(item.getPurchaseCycle()) : null;
+            case "purchaseQuantity": return item.getPurchaseQuantity() != null ? item.getPurchaseQuantity().toString() : null;
+            case "maxMonthlyReplenish": return item.getMaxMonthlyReplenish() != null ? String.valueOf(item.getMaxMonthlyReplenish()) : null;
+            default: return null;
+        }
+    }
+
+    /** 数值字段集合 */
+    private static final Set<String> NUMERIC_FIELDS_SET = new HashSet<>(Arrays.asList(
+        "last30DaysProfit", "returnRate", "overseasOnway", "overseasSellable", "overseasTotal",
+        "purchasePendingDelivery", "localSellable", "localOnway", "purchasePlan", "lockNum",
+        "totalInventory", "last7DaysSales", "last30DaysSales", "last90DaysSales", "maxMonthlySales",
+        "overseasInStockRatio", "overseasTotalRatio", "totalInventoryRatio",
+        "outboundDays", "purchaseCycle", "purchaseQuantity", "maxMonthlyReplenish"
+    ));
+
+    /** 百分比字段（前端*100显示，后端存原值0~1），筛选时需/100 */
+    private static final Set<String> PERCENT_FIELDS = new HashSet<>(Arrays.asList(
+        "returnRate", "overseasInStockRatio", "overseasTotalRatio", "totalInventoryRatio"
+    ));
+
+    private boolean isNumericField(String field) { return NUMERIC_FIELDS_SET.contains(field); }
+    private boolean isPercentageField(String field) { return PERCENT_FIELDS.contains(field); }
+
+    private String[] parseNumericFilter(String raw, boolean isPercent) {
+        if (raw == null || raw.isEmpty()) return null;
+        String s = raw.trim(); String op; String numStr;
+        if (s.startsWith(">=")) { op = ">="; numStr = s.substring(2).trim(); }
+        else if (s.startsWith("<=")) { op = "<="; numStr = s.substring(2).trim(); }
+        else if (s.startsWith(">")) { op = ">"; numStr = s.substring(1).trim(); }
+        else if (s.startsWith("<")) { op = "<"; numStr = s.substring(1).trim(); }
+        else if (s.startsWith("=")) { op = "="; numStr = s.substring(1).trim(); }
+        else return null;
+        if (numStr.isEmpty()) return null;
+        try {
+            double v = Double.parseDouble(numStr);
+            if (isPercent) v /= 100.0;
+            return new String[]{ op, String.valueOf(v) };
+        } catch (NumberFormatException e) { return null; }
+    }
+
+    private Double getNumericValue(InventoryOverviewItem item, String field) {
+        switch (field) {
+            case "last30DaysProfit": return item.getLast30DaysProfit() != null ? item.getLast30DaysProfit().doubleValue() : null;
+            case "returnRate": return item.getReturnRate() != null ? item.getReturnRate().doubleValue() : null;
+            case "overseasOnway": return (double) item.getOverseasOnway();
+            case "overseasSellable": return (double) item.getOverseasSellable();
+            case "overseasTotal": return (double) item.getOverseasTotal();
+            case "purchasePendingDelivery": return (double) item.getPurchasePendingDelivery();
+            case "localSellable": return (double) item.getLocalSellable();
+            case "localOnway": return (double) item.getLocalOnway();
+            case "purchasePlan": return item.getPurchasePlan() != null ? item.getPurchasePlan().doubleValue() : null;
+            case "lockNum": return (double) item.getLockNum();
+            case "totalInventory": return (double) item.getTotalInventory();
+            case "last7DaysSales": return (double) item.getLast7DaysSales();
+            case "last30DaysSales": return (double) item.getLast30DaysSales();
+            case "last90DaysSales": return (double) item.getLast90DaysSales();
+            case "maxMonthlySales": return item.getMaxMonthlySales() != null ? item.getMaxMonthlySales().doubleValue() : null;
+            case "overseasInStockRatio": return item.getOverseasInStockRatio() != null ? item.getOverseasInStockRatio().doubleValue() : null;
+            case "overseasTotalRatio": return item.getOverseasTotalRatio() != null ? item.getOverseasTotalRatio().doubleValue() : null;
+            case "totalInventoryRatio": return item.getTotalInventoryRatio() != null ? item.getTotalInventoryRatio().doubleValue() : null;
+            case "outboundDays": return item.getOutboundDays() != null ? item.getOutboundDays().doubleValue() : null;
+            case "purchaseCycle": return item.getPurchaseCycle() != null ? item.getPurchaseCycle().doubleValue() : null;
+            case "purchaseQuantity": return item.getPurchaseQuantity() != null ? item.getPurchaseQuantity().doubleValue() : null;
+            case "maxMonthlyReplenish": return item.getMaxMonthlyReplenish() != null ? item.getMaxMonthlyReplenish().doubleValue() : null;
             default: return null;
         }
     }

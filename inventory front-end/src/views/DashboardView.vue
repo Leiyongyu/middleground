@@ -49,16 +49,17 @@ const NUMERIC_FIELDS = new Set([
 // ===== 列筛选 =====
 const filterField = ref('')
 const filterValue = ref('')
-const filterInput = ref('')
+const filterInputVal = ref('')
 const filterChecked = ref([])  // 多选值
 const filterSearchResults = ref([])
+const filterRawRef = ref(null)   // 原生输入框 DOM 引用
 let filterTimer = null
 const showFilter = ref(false)
 const filterX = ref(0)
 const filterY = ref(0)
 const TEXT_FIELDS = new Set(['warehouseNames', 'sku', 'productName', 'skuLevel', 'lastLocalOutboundTime', 'owner'])
 
-watch(filterInput, (val) => {
+watch(filterInputVal, (val) => {
   if (!showFilter.value || !filterField.value) return
   clearTimeout(filterTimer)
   filterTimer = setTimeout(async () => {
@@ -81,10 +82,12 @@ const distinctFilterValues = computed(() => {
 
 function openFilter(key, e) {
   filterField.value = key
-  filterInput.value = ''
+  filterInputVal.value = ''
   filterSearchResults.value = []
   filterChecked.value = filterField.value === key && filterValue.value
     ? filterValue.value.split(',').filter(Boolean) : []
+  // 回显已有的筛选值
+  if (filterValue.value) filterInputVal.value = filterValue.value
   const rect = e.currentTarget.getBoundingClientRect()
   filterX.value = rect.left
   filterY.value = rect.bottom + 4
@@ -96,10 +99,11 @@ function toggleFilterCheck(val) {
   else filterChecked.value.push(val)
 }
 function applyFilter() {
+  const rawVal = filterInputVal.value
   if (filterChecked.value.length) {
     filterValue.value = filterChecked.value.join(',')
-  } else if (filterInput.value.trim()) {
-    filterValue.value = filterInput.value.trim()
+  } else if (rawVal && rawVal.trim()) {
+    filterValue.value = rawVal.trim()
   } else {
     filterValue.value = ''
   }
@@ -110,7 +114,7 @@ function applyFilter() {
 function clearFilter() {
   filterField.value = ''
   filterValue.value = ''
-  filterInput.value = ''
+  filterInputVal.value = ''
   filterChecked.value = []
   showFilter.value = false
   query.page = 1
@@ -133,7 +137,6 @@ function handleSortClick(key) {
 }
 
 function renderFilterIcon(key) {
-  if (!TEXT_FIELDS.has(key)) return ''
   const isActive = filterField.value === key && filterValue.value
   const color = isActive ? '#1677ff' : '#bfbfbf'
   return h('svg', {
@@ -258,11 +261,10 @@ const replenishColumns = [
   .map((c) => {
     if (!c.key) return c
     const needSort = NUMERIC_FIELDS.has(c.key)
-    const needFilter = TEXT_FIELDS.has(c.key)
-    if (!needSort && !needFilter) return c
+    if (!c.key) return c
     const origTitle = c.title
     c.title = () => h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px' } }, [
-      needFilter ? renderFilterIcon(c.key) : null,
+      renderFilterIcon(c.key),
       origTitle,
       needSort ? renderSortIcon(c.key) : null,
     ].filter(Boolean))
@@ -537,26 +539,19 @@ function handleDropdownSelect(key) {
     <Teleport to="body">
       <div v-if="showFilter" class="filter-popover" :style="{ left: filterX + 'px', top: filterY + 'px' }" @click.stop>
         <div class="filter-popover-inner">
-          <NInput
-            v-model:value="filterInput"
-            size="small"
-            placeholder="输入关键词模糊搜索..."
-            clearable
-            @keyup.enter="applyFilter()"
-            @clear="clearFilter"
-          />
-          <div v-if="!filterInput && distinctFilterValues.length" class="filter-distinct-list">
+          <input ref="filterRawRef" :value="filterInputVal" class="filter-raw-input" :placeholder="NUMERIC_FIELDS.has(filterField) ? '数值: >14, >=5, <10...' : '搜索关键词...'" @input="filterInputVal = $event.target.value" @keyup.enter="applyFilter()" />
+          <div v-if="!filterInputVal && distinctFilterValues.length" class="filter-distinct-list">
             <div class="filter-distinct-title">当前页可选值</div>
             <div v-for="v in distinctFilterValues" :key="v" class="filter-distinct-item">
               <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
-              <span @click="toggleFilterCheck(v)" style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v }}</span>
+              <span @click="toggleFilterCheck(v)" class="filter-item-label">{{ v }}</span>
             </div>
           </div>
-          <div v-if="filterInput && filterSearchResults.length" class="filter-distinct-list">
+          <div v-if="filterInputVal && filterSearchResults.length" class="filter-distinct-list">
             <div class="filter-distinct-title">全量匹配（{{ filterSearchResults.length }} 条）</div>
             <div v-for="v in filterSearchResults" :key="v" class="filter-distinct-item">
               <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
-              <span @click="toggleFilterCheck(v)" style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v }}</span>
+              <span @click="toggleFilterCheck(v)" class="filter-item-label">{{ v }}</span>
             </div>
           </div>
           <NSpace size="small" style="margin-top: 8px" justify="end">
@@ -760,6 +755,13 @@ function handleDropdownSelect(key) {
   min-width: 220px;
   max-width: 300px;
 }
+.filter-raw-input {
+  width: 100%; box-sizing: border-box;
+  height: 30px; padding: 0 8px;
+  border: 1px solid #d9d9d9; border-radius: 4px;
+  font-size: 13px; outline: none;
+}
+.filter-raw-input:focus { border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.1); }
 .filter-distinct-list {
   max-height: 180px;
   overflow-y: auto;
@@ -784,5 +786,8 @@ function handleDropdownSelect(key) {
 .filter-distinct-item:hover {
   background: #e6f4ff;
   color: #1677ff;
+}
+.filter-item-label {
+  flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 </style>
