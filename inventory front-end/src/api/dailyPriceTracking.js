@@ -1,8 +1,13 @@
 import { apiGet, apiPost } from '@/api/request'
 
 /** 分页查询每日跟价 */
-export function fetchDailyPriceTracking({ page, size, site, sku, brand, operator }) {
-  return apiGet('/api/daily-price-tracking', { page, size, site, sku, brand, operator })
+export function fetchDailyPriceTracking(body) {
+  return apiPost('/api/daily-price-tracking/search', body)
+}
+
+/** 字段去重值 */
+export function fetchDistinctValues(field, keyword) {
+  return apiGet('/api/daily-price-tracking/distinct-values', { field, keyword })
 }
 
 /** 保存或更新备注（按 site+sku upsert） */

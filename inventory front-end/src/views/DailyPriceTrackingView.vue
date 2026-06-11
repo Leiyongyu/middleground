@@ -1,19 +1,117 @@
 <script setup>
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   NButton, NCard, NCheckbox, NDataTable, NDrawer, NDrawerContent, NDropdown, NInput, NSpace, NTag, useMessage,
 } from 'naive-ui'
-import { fetchDailyPriceTracking, refreshDailyPriceTrackingSnapshot, exportDailyPriceTracking, importLowestPrice, saveOe, saveRemark } from '@/api/dailyPriceTracking'
+import { fetchDailyPriceTracking, fetchDistinctValues, refreshDailyPriceTrackingSnapshot, exportDailyPriceTracking, importLowestPrice, saveOe, saveRemark } from '@/api/dailyPriceTracking'
 import { useDataTable } from '@/composables/useDataTable'
 import { useColumnConfig } from '@/composables/useColumnConfig'
 
 const message = useMessage()
 
-const { loading, records, total, query, loadData } = useDataTable(
+const { loading, records, total, query, filters, loadData: _loadData } = useDataTable(
   fetchDailyPriceTracking,
   {},
   { pageSize: 100, loadOnMount: false },
 )
+async function loadData() {
+  loading.value = true
+  try {
+    const body = { page: query.page, size: query.size }
+    for (const [k, v] of Object.entries(filters)) { if (v && String(v).trim()) body[k] = String(v).trim() }
+    if (activeFilters.value.length) body.filters = activeFilters.value.map(f => ({ field: f.field, value: f.value }))
+    const result = await fetchDailyPriceTracking(body)
+    records.value = result?.records || []
+    total.value = Number(result?.total || 0)
+  } finally { loading.value = false }
+}
+
+// ===== 筛选 =====
+const activeFilters = ref([])
+const filterField = ref('')
+const filterInputVal = ref('')
+const filterNumOpVal = ref('>')
+const filterNumInputVal = ref('')
+const filterChecked = ref([])
+const filterSearchResults = ref([])
+const filterRawRef = ref(null)
+const showFilter = ref(false)
+const filterX = ref(0)
+const filterY = ref(0)
+let filterTimer = null
+const TEXT_KEYS = new Set(['site','sku','skuLevel','productName','oeNumber','ebayFrontpageUrl','frontpageSoldUrl','brand','operator','remark'])
+
+const distinctValues = computed(() => {
+  if (!filterField.value) return []
+  const set = new Set()
+  for (const row of records.value) { const v = row[filterField.value]; if (v != null && String(v).trim()) set.add(String(v).trim()) }
+  return [...set].sort().slice(0, 50)
+})
+
+watch(filterInputVal, (val) => {
+  if (!showFilter.value || !filterField.value) return
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(async () => {
+    if (!val || !val.trim()) { filterSearchResults.value = []; return }
+    try { filterSearchResults.value = await fetchDistinctValues(filterField.value, val.trim()) || [] }
+    catch { filterSearchResults.value = [] }
+  }, 200)
+})
+
+function openFilter(key, e) {
+  filterField.value = key; filterInputVal.value = ''; filterNumOpVal.value = '>'; filterNumInputVal.value = ''; filterSearchResults.value = []
+  const exist = activeFilters.value.find(f => f.field === key)
+  filterChecked.value = exist && !NUMERIC_KEYS.has(key) ? exist.value.split(',').filter(Boolean) : []
+  if (exist) {
+    if (NUMERIC_KEYS.has(key)) { const m = exist.value.match(/^(>=|<=|>|<|=)(.+)$/); if (m) { filterNumOpVal.value = m[1]; filterNumInputVal.value = m[2] } }
+    else filterInputVal.value = exist.value
+  }
+  const rect = e.currentTarget.getBoundingClientRect(); filterX.value = rect.left; filterY.value = rect.bottom + 4; showFilter.value = true
+}
+function toggleFilterCheck(val) { const i = filterChecked.value.indexOf(val); if (i >= 0) filterChecked.value.splice(i, 1); else filterChecked.value.push(val) }
+function applyFilter() {
+  const f = filterField.value
+  const raw = NUMERIC_KEYS.has(f) ? (filterNumInputVal.value ? filterNumOpVal.value + filterNumInputVal.value.trim() : '') : filterInputVal.value
+  const v = filterChecked.value.length ? filterChecked.value.join(',') : (raw && raw.trim() ? raw.trim() : '')
+  activeFilters.value = activeFilters.value.filter(af => af.field !== f)
+  if (v) activeFilters.value.push({ field: f, value: v, display: (allColumnMap[f] || f) + ':' + v })
+  showFilter.value = false; query.page = 1; loadData()
+}
+function clearFilter() { activeFilters.value = activeFilters.value.filter(af => af.field !== filterField.value); filterInputVal.value = ''; filterNumOpVal.value = '>'; filterNumInputVal.value = ''; filterChecked.value = []; showFilter.value = false; query.page = 1; loadData() }
+function clearAllFilters() { activeFilters.value = []; filterField.value = ''; query.page = 1; loadData() }
+function onDocClick() { if (showFilter.value) showFilter.value = false }
+
+// ===== 排序（通过 filters 传递 sortField/sortOrder）=====
+const NUMERIC_KEYS = new Set([
+  'ourLowestPrice', 'trackingProfitMargin', 'floorPrice', 'returnRate',
+  'last3DaysSales', 'last7DaysSales', 'last30DaysSales', 'last90DaysSales',
+  'maxMonthlySales', 'overseasWarehouseStock', 'overseasWarehouseAge',
+  'stockSalesRatio', 'estimatedReplenish', 'trackingPrice',
+])
+
+function handleSortClick(key) {
+  if (!NUMERIC_KEYS.has(key)) return
+  if (filters.sortField !== key) { filters.sortField = key; filters.sortOrder = 'desc' }
+  else if (filters.sortOrder === 'desc') { filters.sortOrder = 'asc' }
+  else if (filters.sortOrder === 'asc') { filters.sortField = ''; filters.sortOrder = '' }
+  else { filters.sortField = key; filters.sortOrder = 'desc' }
+  query.page = 1
+  loadData()
+}
+function renderSortIcon(key) {
+  if (!NUMERIC_KEYS.has(key)) return ''
+  const isActive = filters.sortField === key
+  const color = isActive && filters.sortOrder ? '#1677ff' : '#bfbfbf'
+  const isAsc = isActive && filters.sortOrder === 'asc'
+  const triangle = isAsc
+    ? 'M863.764 270.458c32.518-35.975 85.239-35.975 117.757 0l401.018 443.652c32.519 35.977 19.57 65.14-28.913 65.14h-861.969c-48.485 0-61.43-29.164-28.913-65.14l401.018-443.652z'
+    : 'M855.721 739.856c30.486 33.728 79.913 33.728 110.397 0l375.954-415.921c30.487-33.729 18.347-61.069-27.103-61.069h-808.099c-45.455 0-57.591 27.341-27.106 61.068l375.955 415.923z'
+  return h('svg', {
+    viewBox: '0 0 1824 1024', width: '12', height: '12',
+    style: { color, marginLeft: '0', cursor: 'pointer', flexShrink: 0, verticalAlign: 'middle' },
+    onClick: (e) => { e.stopPropagation(); handleSortClick(key) },
+  }, [h('path', { fill: 'currentColor', d: triangle })])
+}
 
 // ===== 备注编辑状态（非受控 NInput 模式） =====
 const remarkInputs = {}  // key: "site|sku" → 当前输入值
@@ -24,7 +122,9 @@ const tableMaxHeight = 680
 onMounted(async () => {
   await initColConfig('daily-price-tracking')
   loadData()
+  document.addEventListener('click', onDocClick)
 })
+onUnmounted(() => { document.removeEventListener('click', onDocClick) })
 
 async function handleRefresh() {
   loading.value = true
@@ -140,11 +240,11 @@ function renderLink(url) {
 const columns = [
   { type: 'selection', multiple: true, width: 40, fixed: 'left' },
   { title: '站点', key: 'site', width: 100, fixed: 'left' },
-  { title: 'SKU等级', key: 'skuLevel', width: 90, fixed: 'left' },
   { title: 'SKU', key: 'sku', width: 140, fixed: 'left', ellipsis: { tooltip: true } },
-  { title: '最低价', key: 'ourLowestPrice', width: 90, align: 'center',
+  { title: '等级', key: 'skuLevel', width: 110, fixed: 'left' },
+  { title: '最低价', key: 'ourLowestPrice', width: 110, align: 'center',
     render: (row) => row.ourLowestPrice ?? '' },
-  { title: '跟卖价格', key: 'trackingPrice', width: 110, align: 'center',
+  { title: '跟卖价', key: 'trackingPrice', width: 120, align: 'center',
     render: (row) => {
       const tpKey = 'tp_' + row.site + '|' + row.sku
       if (!(tpKey in remarkInputs)) remarkInputs[tpKey] = row.trackingPrice ?? ''
@@ -173,21 +273,21 @@ const columns = [
       })
     },
   },
-  { title: '跟卖利润率', key: 'trackingProfitMargin', width: 100, align: 'center',
+  { title: '跟卖利润率', key: 'trackingProfitMargin', width: 140, align: 'center',
     render: (row) => row.trackingProfitMargin != null ? (row.trackingProfitMargin * 100).toFixed(1) + '%' : '' },
-  { title: '底线价', key: 'floorPrice', width: 90, align: 'center',
+  { title: '底线价', key: 'floorPrice', width: 110, align: 'center',
     render: (row) => row.floorPrice ?? '' },
-  { title: '退货率', key: 'returnRate', width: 80, align: 'center',
+  { title: '退货率', key: 'returnRate', width: 110, align: 'center',
     render: (row) => row.returnRate != null ? row.returnRate + '%' : '' },
-  { title: '近3天销量', key: 'last3DaysSales', width: 100, align: 'center',
+  { title: '近3天销量', key: 'last3DaysSales', width: 130, align: 'center',
     render: (row) => row.last3DaysSales ?? '' },
-  { title: '近7天销量', key: 'last7DaysSales', width: 100, align: 'center',
+  { title: '近7天销量', key: 'last7DaysSales', width: 130, align: 'center',
     render: (row) => row.last7DaysSales ?? '' },
-  { title: '近30天销量', key: 'last30DaysSales', width: 110, align: 'center',
+  { title: '近30天销量', key: 'last30DaysSales', width: 150, align: 'center',
     render: (row) => row.last30DaysSales ?? '' },
-  { title: '近90天销量', key: 'last90DaysSales', width: 110, align: 'center',
+  { title: '近90天销量', key: 'last90DaysSales', width: 150, align: 'center',
     render: (row) => row.last90DaysSales ?? '' },
-  { title: '历史最大月销', key: 'maxMonthlySales', width: 120, align: 'center',
+  { title: '历史最大月销', key: 'maxMonthlySales', width: 150, align: 'center',
     render: (row) => row.maxMonthlySales ?? '' },
   { title: 'OE号', key: 'oeNumber', width: 140, ellipsis: { tooltip: true },
     render: (row) => {
@@ -228,13 +328,13 @@ const columns = [
     render: (row) => renderLink(row.ebayFrontpageUrl) },
   { title: '售后链接', key: 'frontpageSoldUrl', width: 150, ellipsis: { tooltip: true },
     render: (row) => renderLink(row.frontpageSoldUrl) },
-  { title: '海外仓库存', key: 'overseasWarehouseStock', width: 110, align: 'center',
+  { title: '海外仓库存', key: 'overseasWarehouseStock', width: 140, align: 'center',
     render: (row) => row.overseasWarehouseStock ?? '' },
-  { title: '海外仓库龄', key: 'overseasWarehouseAge', width: 110, align: 'center',
+  { title: '海外仓库龄', key: 'overseasWarehouseAge', width: 140, align: 'center',
     render: (row) => row.overseasWarehouseAge != null ? row.overseasWarehouseAge + '天' : '' },
-  { title: '库销比', key: 'stockSalesRatio', width: 90, align: 'center',
+  { title: '库销比', key: 'stockSalesRatio', width: 110, align: 'center',
     render: (row) => row.stockSalesRatio != null ? row.stockSalesRatio + '%' : '' },
-  { title: '预估补货量', key: 'estimatedReplenish', width: 110, align: 'center',
+  { title: '预估补货量', key: 'estimatedReplenish', width: 140, align: 'center',
     render: (row) => row.estimatedReplenish ?? '' },
   { title: '品牌', key: 'brand', width: 100 },
   { title: '操作员', key: 'operator', width: 100 },
@@ -272,10 +372,29 @@ const columns = [
   },
 ].map((c) => ({ ...c, resizable: false, minWidth: 70 }))
 
-// ===== 列配置 =====
-const selectionCol = columns[0]  // type: 'selection'
+// ===== 列配置（必须在替换 title 前取原始字符串）=====
 const dataColumns = columns.filter(c => c.key)
 const allColumnMap = dataColumns.reduce((m, c) => { m[c.key] = c.title; return m }, {})
+const selectionCol = columns[0]
+
+// 给列标题加筛选/排序图标
+function renderFilterIcon(key) {
+  const isActive = activeFilters.value.some(f => f.field === key)
+  return h('svg', { viewBox: '0 0 1024 1024', width: '12', height: '12',
+    style: { color: isActive ? '#1677ff' : '#bfbfbf', marginLeft: '0', cursor: 'pointer', flexShrink: 0 },
+    onClick: (e) => { e.stopPropagation(); openFilter(key, e) },
+  }, [h('path', { fill: 'currentColor', d: 'M911.2 128H112.8c-52.8 0-80 58.4-41.6 98.4L384 576v288c0 17.6 14.4 32 32 32h192c17.6 0 32-14.4 32-32V576l312.8-349.6c38.4-40 11.2-98.4-41.6-98.4z' })])
+}
+columns.forEach((c) => {
+  if (!c.key) return
+  const needSort = NUMERIC_KEYS.has(c.key)
+  const origTitle = c.title
+  c.title = () => h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '10px' } }, [
+    renderFilterIcon(c.key),
+    origTitle,
+    needSort ? renderSortIcon(c.key) : null,
+  ].filter(Boolean))
+})
 const {
   showDrawer, visibleKeys, editingKeys, leftCols, selCols, isAllChecked,
   init: initColConfig, openDrawer, apply: applyColConfig,
@@ -313,6 +432,12 @@ const checkedRowKeys = ref([])
       <template #header-extra>
         <NTag size="small" :bordered="false">共 {{ total }} 条</NTag>
       </template>
+
+      <!-- 筛选标签 -->
+      <div v-if="activeFilters.length" class="filter-tags">
+        <NTag v-for="f in activeFilters" :key="f.field" closable size="small" type="info" @close="activeFilters = activeFilters.filter(af => af.field !== f.field); query.page = 1; loadData()">{{ f.display }}</NTag>
+        <NButton size="tiny" text type="error" @click="clearAllFilters">清除全部</NButton>
+      </div>
 
       <NDataTable
         remote
@@ -379,6 +504,43 @@ const checkedRowKeys = ref([])
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <!-- 筛选弹窗 -->
+    <Teleport to="body">
+      <div v-if="showFilter" class="filter-popover" :style="{ left: filterX + 'px', top: filterY + 'px' }" @click.stop>
+        <div class="filter-popover-inner">
+          <template v-if="!NUMERIC_KEYS.has(filterField)">
+            <input ref="filterRawRef" :value="filterInputVal" class="filter-raw-input" placeholder="搜索关键词..." @input="filterInputVal = $event.target.value" @keyup.enter="applyFilter()" />
+          </template>
+          <template v-else>
+            <div class="filter-num-row">
+              <select v-model="filterNumOpVal" class="filter-op-select">
+                <option v-for="op in ['>','>=','=','<=','<']" :key="op" :value="op">{{ op }}</option>
+              </select>
+              <input ref="filterRawRef" :value="filterNumInputVal" class="filter-raw-input" style="flex:1" type="number" placeholder="数值" @input="filterNumInputVal = $event.target.value" @keyup.enter="applyFilter()" />
+            </div>
+          </template>
+          <div v-if="!filterInputVal && !filterNumInputVal && distinctValues.length" class="filter-distinct-list">
+            <div class="filter-distinct-title">当前页可选值</div>
+            <div v-for="v in distinctValues" :key="v" class="filter-distinct-item">
+              <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
+              <span @click="toggleFilterCheck(v)" class="filter-item-label">{{ v }}</span>
+            </div>
+          </div>
+          <div v-if="(filterInputVal || filterNumInputVal) && filterSearchResults.length" class="filter-distinct-list">
+            <div class="filter-distinct-title">全量匹配（{{ filterSearchResults.length }} 条）</div>
+            <div v-for="v in filterSearchResults" :key="v" class="filter-distinct-item">
+              <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
+              <span @click="toggleFilterCheck(v)" class="filter-item-label">{{ v }}</span>
+            </div>
+          </div>
+          <NSpace size="small" style="margin-top: 8px" justify="end">
+            <NButton size="tiny" @click="clearFilter">清除</NButton>
+            <NButton size="tiny" type="primary" @click="applyFilter()">确定</NButton>
+          </NSpace>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -511,9 +673,17 @@ const checkedRowKeys = ref([])
   color: #999;
   cursor: default;
 }
-.col-config-drag {
-  color: #bbb;
-  font-size: 14px;
-  user-select: none;
-}
+.col-config-drag { color: #bbb; font-size: 14px; user-select: none; }
+.filter-popover { position: fixed; z-index: 2000; }
+.filter-popover-inner { background: #fff; border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); padding: 12px; min-width: 220px; max-width: 300px; }
+.filter-raw-input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 8px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; outline: none; }
+.filter-raw-input:focus { border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.1); }
+.filter-op-select { height: 30px; width: 60px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; text-align: center; cursor: pointer; outline: none; padding-left: 2px; padding-right: 0; }
+.filter-num-row { display: flex; align-items: center; gap: 8px; }
+.filter-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0 8px; flex-shrink: 0; }
+.filter-distinct-list { max-height: 180px; overflow-y: auto; margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; }
+.filter-distinct-title { font-size: 11px; color: #999; padding: 4px 0; }
+.filter-distinct-item { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 3px 8px; cursor: pointer; border-radius: 3px; }
+.filter-distinct-item:hover { background: #e6f4ff; color: #1677ff; }
+.filter-item-label { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

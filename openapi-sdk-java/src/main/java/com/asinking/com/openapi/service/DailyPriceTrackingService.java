@@ -3,19 +3,23 @@ package com.asinking.com.openapi.service;
 import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.dto.response.DailyPriceTrackingItem;
 
+import java.util.List;
+import java.util.Map;
+
 /**
- * 每日跟价服务：独立于补货页（InventoryOverviewService）的数据查询与计算。
- * 直接从各数据源查询，使用共享工具方法，返回专用 DTO。
+ * 每日跟价服务。
  */
 public interface DailyPriceTrackingService {
 
-    /**
-     * 分页查询每日跟价数据，支持站点、SKU、品牌（负责人）、操作员筛选。
-     * @return 分页结果，records 为 {@link DailyPriceTrackingItem} 列表
-     */
     PageResult<DailyPriceTrackingItem> page(long page, long size,
-                                            String site, String sku, String brand, String operator);
+                                            String site, String sku, String brand, String operator,
+                                            String sortField, String sortOrder);
 
-    /** 重算并写入数据库 */
+    PageResult<DailyPriceTrackingItem> search(long page, long size,
+                                              List<Map<String, String>> filters,
+                                              String sortField, String sortOrder);
+
     void refreshTable();
+
+    List<String> searchDistinctValues(String field, String keyword);
 }

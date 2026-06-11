@@ -40,6 +40,7 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
     private final GoodcangGrnDetailMapper grnDetailMapper;
     private final GoodcangWarehouseMapper gcWarehouseMapper;
     private final InventoryOverviewService overviewService;
+    private final InventoryOverviewMapper inventoryOverviewMapper;
     private final LowestPriceRecordService lowestPriceService;
     private final EbayProductDedupService dedupService;
     private final EbayLinkTemplateService linkTemplateService;
@@ -53,6 +54,7 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
                                          GoodcangGrnDetailMapper grnDetailMapper,
                                          GoodcangWarehouseMapper gcWarehouseMapper,
                                          InventoryOverviewService overviewService,
+                                         InventoryOverviewMapper inventoryOverviewMapper,
                                          LowestPriceRecordService lowestPriceService,
                                          EbayProductDedupService dedupService,
                                          EbayLinkTemplateService linkTemplateService,
@@ -66,6 +68,7 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
         this.grnDetailMapper = grnDetailMapper;
         this.gcWarehouseMapper = gcWarehouseMapper;
         this.overviewService = overviewService;
+        this.inventoryOverviewMapper = inventoryOverviewMapper;
         this.lowestPriceService = lowestPriceService;
         this.dedupService = dedupService;
         this.linkTemplateService = linkTemplateService;
@@ -74,7 +77,8 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
 
     @Override
     public PageResult<DailyPriceTrackingItem> page(long page, long size,
-                                                   String site, String sku, String brand, String operator) {
+                                                   String site, String sku, String brand, String operator,
+                                                   String sortField, String sortOrder) {
         // 1. 优先从缓存表读取，表为空则实时计算
         Long tableCount = cacheMapper.selectCount(null);
         List<DailyPriceTrackingItem> allRows;
@@ -92,7 +96,14 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
                 .filter(e -> matchContains(operator, e.getOperator()))
                 .collect(Collectors.toList());
 
-        // 3. 内存分页
+        // 3. 排序
+        if (StringUtils.hasText(sortField) && StringUtils.hasText(sortOrder)) {
+            boolean asc = "asc".equalsIgnoreCase(sortOrder.trim());
+            Comparator<DailyPriceTrackingItem> cmp = getSortComparator(sortField.trim(), asc);
+            if (cmp != null) filtered.sort(cmp);
+        }
+
+        // 4. 内存分页
         long p = page <= 0 ? 1 : page;
         long s = size <= 0 ? 20 : Math.min(size, 200);
         long total = filtered.size();
@@ -103,6 +114,36 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
                 : Collections.emptyList();
 
         return new PageResult<>(total, p, s, pageRecords);
+    }
+
+    private Comparator<DailyPriceTrackingItem> getSortComparator(String field, boolean asc) {
+        java.util.function.Function<DailyPriceTrackingItem, Comparable> getter;
+        switch (field) {
+            case "site": getter = DailyPriceTrackingItem::getSite; break;
+            case "sku": getter = DailyPriceTrackingItem::getSku; break;
+            case "skuLevel": getter = DailyPriceTrackingItem::getSkuLevel; break;
+            case "ourLowestPrice": getter = i -> i.getOurLowestPrice(); break;
+            case "trackingPrice": getter = i -> i.getTrackingPrice(); break;
+            case "trackingProfitMargin": getter = i -> i.getTrackingProfitMargin(); break;
+            case "floorPrice": getter = i -> i.getFloorPrice(); break;
+            case "returnRate": getter = i -> i.getReturnRate(); break;
+            case "last3DaysSales": getter = i -> i.getLast3DaysSales(); break;
+            case "last7DaysSales": getter = i -> i.getLast7DaysSales(); break;
+            case "last30DaysSales": getter = i -> i.getLast30DaysSales(); break;
+            case "last90DaysSales": getter = i -> i.getLast90DaysSales(); break;
+            case "maxMonthlySales": getter = i -> i.getMaxMonthlySales(); break;
+            case "overseasWarehouseStock": getter = i -> i.getOverseasWarehouseStock(); break;
+            case "overseasWarehouseAge": getter = i -> i.getOverseasWarehouseAge(); break;
+            case "stockSalesRatio": getter = i -> i.getStockSalesRatio(); break;
+            case "estimatedReplenish": getter = i -> i.getEstimatedReplenish(); break;
+            case "brand": getter = DailyPriceTrackingItem::getBrand; break;
+            case "operator": getter = DailyPriceTrackingItem::getOperator; break;
+            default: return null;
+        }
+        Comparator<DailyPriceTrackingItem> cmp = asc
+                ? Comparator.comparing(getter, Comparator.nullsLast(Comparator.naturalOrder()))
+                : Comparator.comparing(getter, Comparator.nullsLast(Comparator.reverseOrder()));
+        return cmp;
     }
 
     // ====================================================================
@@ -196,6 +237,14 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
                         e -> StringUtils.hasText(e.getBrandCode()) ? e.getBrandCode().trim().toUpperCase() : "",
                         e -> StringUtils.hasText(e.getOwnerName()) ? e.getOwnerName().trim() : "",
                         (a, b) -> a));
+
+        // ==== 5b. 利润率直接查 inventory_overview 表 ====
+        Map<String, BigDecimal> profitRateMap = new LinkedHashMap<>();
+        for (InventoryOverviewEntity e : inventoryOverviewMapper.selectList(null)) {
+            if (e.getWarehouseNames() != null && e.getSku() != null && e.getLast30DaysProfit() != null) {
+                profitRateMap.put(e.getWarehouseNames() + "|" + e.getSku(), e.getLast30DaysProfit());
+            }
+        }
 
         // ==== 6. 出库时间 from goodcang GRN ====
         List<GoodcangGrnDetailEntity> allGrnDetails = grnDetailMapper.selectList(null);
@@ -297,8 +346,9 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
 
                 // 预估补货量：直接从补货页采购数量匹配（按站点+去除PC前缀的SKU）
 
-                // SKU 等级（profitRate 暂为 0，因为 last30DaysProfit 数据源未接入）
-                item.setSkuLevel(InventoryUtils.calcProductLevel(d30, 0));
+                // SKU 等级：从补货页 inventory_overview 取利润率
+                double profitRate = profitRateMap.getOrDefault(siteLabel + "|" + baseSku, BigDecimal.ZERO).doubleValue();
+                item.setSkuLevel(InventoryUtils.calcProductLevel(d30, profitRate));
 
                 // 品牌 & 操作员
                 item.setBrand(InventoryUtils.extractBrandPrefix(baseSku));
@@ -491,4 +541,149 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
         i.setRemark(e.getRemark()); i.setOeNumber(e.getOeNumber()); return i;
     }
 
+    @Override
+    public PageResult<DailyPriceTrackingItem> search(long page, long size,
+                                                      List<Map<String, String>> filters,
+                                                      String sortField, String sortOrder) {
+        Long tableCount = cacheMapper.selectCount(null);
+        List<DailyPriceTrackingItem> allRows = (tableCount != null && tableCount > 0)
+                ? cacheMapper.selectList(null).stream().map(this::entityToDto).collect(Collectors.toList())
+                : computeDailyPriceTracking();
+
+        // 多字段筛选
+        if (filters != null && !filters.isEmpty()) {
+            for (Map<String, String> f : filters) {
+                String field = f.get("field"), val = f.get("value");
+                if (field == null || val == null || val.isEmpty()) continue;
+                String raw = val.trim();
+                if (isNumericKey(field)) {
+                    String[] parsed = parseNumFilter(raw, isPercentKey(field));
+                    if (parsed != null) {
+                        String op = parsed[0]; double target = Double.parseDouble(parsed[1]);
+                        allRows = allRows.stream().filter(item -> {
+                            Double dv = getNumVal(item, field);
+                            if (dv == null) return false;
+                            switch (op) {
+                                case ">": return dv > target; case ">=": return dv >= target;
+                                case "<": return dv < target; case "<=": return dv <= target;
+                                case "=": return Math.abs(dv - target) < 1e-10;
+                                default: return false;
+                            }
+                        }).collect(Collectors.toList());
+                        continue;
+                    }
+                }
+                // 文本筛选
+                if (raw.contains(",")) {
+                    Set<String> vals = Arrays.stream(raw.split(",")).map(String::trim)
+                            .filter(s -> !s.isEmpty()).map(String::toLowerCase).collect(Collectors.toSet());
+                    allRows = allRows.stream().filter(item -> {
+                        String fv = getFieldStr(item, field);
+                        return fv != null && vals.contains(fv.toLowerCase());
+                    }).collect(Collectors.toList());
+                } else {
+                    String kw = raw.toLowerCase();
+                    allRows = allRows.stream().filter(item -> {
+                        String fv = getFieldStr(item, field);
+                        return fv != null && fv.toLowerCase().contains(kw);
+                    }).collect(Collectors.toList());
+                }
+            }
+        }
+
+        // 排序
+        if (sortField != null && !sortField.isEmpty() && sortOrder != null && !sortOrder.isEmpty()) {
+            boolean asc = "asc".equalsIgnoreCase(sortOrder.trim());
+            Comparator<DailyPriceTrackingItem> cmp = getSortComparator(sortField.trim(), asc);
+            if (cmp != null) allRows.sort(cmp);
+        }
+
+        // 分页
+        long p = page <= 0 ? 1 : page;
+        long s = size <= 0 ? 20 : size;
+        long total = allRows.size();
+        int from = (int) ((p - 1) * s);
+        int to = (int) Math.min(from + s, total);
+        return new PageResult<>(total, p, s, from < total ? allRows.subList(from, to) : Collections.emptyList());
+    }
+
+    @Override
+    public List<String> searchDistinctValues(String field, String keyword) {
+        Long tableCount = cacheMapper.selectCount(null);
+        List<DailyPriceTrackingItem> all = (tableCount != null && tableCount > 0)
+                ? cacheMapper.selectList(null).stream().map(this::entityToDto).collect(Collectors.toList())
+                : computeDailyPriceTracking();
+        String kw = keyword != null && !keyword.isEmpty() ? keyword.trim().toLowerCase() : "";
+        return all.stream()
+                .map(item -> getFieldStr(item, field))
+                .filter(v -> v != null && !v.isEmpty() && (kw.isEmpty() || v.toLowerCase().contains(kw)))
+                .distinct().sorted().limit(50).collect(Collectors.toList());
+    }
+
+    private static final Set<String> NUM_KEYS = new HashSet<>(Arrays.asList(
+        "ourLowestPrice","trackingPrice","trackingProfitMargin","floorPrice","returnRate",
+        "last3DaysSales","last7DaysSales","last30DaysSales","last90DaysSales","maxMonthlySales",
+        "overseasWarehouseStock","overseasWarehouseAge","stockSalesRatio","estimatedReplenish"
+    ));
+    private static final Set<String> PCT_KEYS = new HashSet<>(Arrays.asList(
+        "trackingProfitMargin","returnRate","stockSalesRatio"
+    ));
+    private boolean isNumericKey(String f) { return NUM_KEYS.contains(f); }
+    private boolean isPercentKey(String f) { return PCT_KEYS.contains(f); }
+
+    private String[] parseNumFilter(String raw, boolean isPercent) {
+        if (raw == null || raw.isEmpty()) return null;
+        String s = raw.trim(), op, ns;
+        if (s.startsWith(">=")) { op = ">="; ns = s.substring(2).trim(); }
+        else if (s.startsWith("<=")) { op = "<="; ns = s.substring(2).trim(); }
+        else if (s.startsWith(">")) { op = ">"; ns = s.substring(1).trim(); }
+        else if (s.startsWith("<")) { op = "<"; ns = s.substring(1).trim(); }
+        else if (s.startsWith("=")) { op = "="; ns = s.substring(1).trim(); }
+        else return null;
+        if (ns.isEmpty()) return null;
+        try {
+            double v = Double.parseDouble(ns);
+            if (isPercent) v /= 100.0;
+            return new String[]{ op, String.valueOf(v) };
+        } catch (NumberFormatException e) { return null; }
+    }
+
+    private Double getNumVal(DailyPriceTrackingItem i, String f) {
+        switch (f) {
+            case "ourLowestPrice": return i.getOurLowestPrice() != null ? i.getOurLowestPrice().doubleValue() : null;
+            case "trackingPrice": return i.getTrackingPrice() != null ? i.getTrackingPrice().doubleValue() : null;
+            case "trackingProfitMargin": return i.getTrackingProfitMargin() != null ? i.getTrackingProfitMargin().doubleValue() : null;
+            case "floorPrice": return i.getFloorPrice() != null ? i.getFloorPrice().doubleValue() : null;
+            case "returnRate": return i.getReturnRate() != null ? i.getReturnRate().doubleValue() : null;
+            case "last3DaysSales": return i.getLast3DaysSales() != null ? i.getLast3DaysSales().doubleValue() : null;
+            case "last7DaysSales": return i.getLast7DaysSales() != null ? i.getLast7DaysSales().doubleValue() : null;
+            case "last30DaysSales": return i.getLast30DaysSales() != null ? i.getLast30DaysSales().doubleValue() : null;
+            case "last90DaysSales": return i.getLast90DaysSales() != null ? i.getLast90DaysSales().doubleValue() : null;
+            case "maxMonthlySales": return i.getMaxMonthlySales() != null ? i.getMaxMonthlySales().doubleValue() : null;
+            case "overseasWarehouseStock": return i.getOverseasWarehouseStock() != null ? i.getOverseasWarehouseStock().doubleValue() : null;
+            case "overseasWarehouseAge": return i.getOverseasWarehouseAge() != null ? i.getOverseasWarehouseAge().doubleValue() : null;
+            case "stockSalesRatio": return i.getStockSalesRatio() != null ? i.getStockSalesRatio().doubleValue() : null;
+            case "estimatedReplenish": return i.getEstimatedReplenish() != null ? i.getEstimatedReplenish().doubleValue() : null;
+            default: return null;
+        }
+    }
+
+    private String getFieldStr(DailyPriceTrackingItem i, String f) {
+        switch (f) {
+            case "site": return i.getSite();
+            case "sku": return i.getSku();
+            case "skuLevel": return i.getSkuLevel();
+            case "productName": return i.getProductName();
+            case "oeNumber": return i.getOeNumber();
+            case "brand": return i.getBrand();
+            case "operator": return i.getOperator();
+            case "remark": return i.getRemark();
+            case "ebayFrontpageUrl": return i.getEbayFrontpageUrl();
+            case "frontpageSoldUrl": return i.getFrontpageSoldUrl();
+            default: {
+                Double dv = getNumVal(i, f);
+                return dv != null ? dv.toString() : null;
+            }
+        }
+    }
 }

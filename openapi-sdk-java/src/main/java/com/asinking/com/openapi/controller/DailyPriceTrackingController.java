@@ -49,16 +49,24 @@ public class DailyPriceTrackingController {
         return Result.ok("ok");
     }
 
-    /** 分页查询 */
-    @GetMapping
-    public Result<PageResult<DailyPriceTrackingItem>> page(
-            @RequestParam(defaultValue = "1") long page,
-            @RequestParam(defaultValue = "20") long size,
-            @RequestParam(required = false) String site,
-            @RequestParam(required = false) String sku,
-            @RequestParam(required = false) String brand,
-            @RequestParam(required = false) String operator) {
-        return Result.ok(service.page(page, size, site, sku, brand, operator));
+    /** 分页查询（支持多条件筛选） */
+    @PostMapping("/search")
+    public Result<PageResult<DailyPriceTrackingItem>> search(@RequestBody Map<String, Object> body) {
+        long page = body.get("page") != null ? ((Number) body.get("page")).longValue() : 1;
+        long size = body.get("size") != null ? ((Number) body.get("size")).longValue() : 20;
+        String sortField = (String) body.get("sortField");
+        String sortOrder = (String) body.get("sortOrder");
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> filters = (List<Map<String, String>>) body.getOrDefault("filters", Collections.emptyList());
+        return Result.ok(service.search(page, size, filters, sortField, sortOrder));
+    }
+
+    /** 搜索字段去重值 */
+    @GetMapping("/distinct-values")
+    public Result<List<String>> distinctValues(
+            @RequestParam String field,
+            @RequestParam(defaultValue = "") String keyword) {
+        return Result.ok(service.searchDistinctValues(field, keyword));
     }
 
     /** Excel 导出（传 ids 则只导出选中，否则导出筛选条件下的全量） */
@@ -69,7 +77,7 @@ public class DailyPriceTrackingController {
                        @RequestParam(required = false) String operator,
                        @RequestParam(required = false) String ids,
                        HttpServletResponse response) throws Exception {
-        PageResult<DailyPriceTrackingItem> result = service.page(1, Integer.MAX_VALUE, site, sku, brand, operator);
+        PageResult<DailyPriceTrackingItem> result = service.page(1, Integer.MAX_VALUE, site, sku, brand, operator, null, null);
         List<DailyPriceTrackingItem> records = result.getRecords();
 
         // 有 ids 则只保留选中的行（key=site|sku）

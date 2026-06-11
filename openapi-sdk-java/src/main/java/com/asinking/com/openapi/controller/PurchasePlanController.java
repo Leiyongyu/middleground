@@ -2,14 +2,15 @@ package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.common.response.Result;
 import com.asinking.com.openapi.common.annotation.OperationLog;
-import com.asinking.com.openapi.dto.response.InventoryOverviewItem;
 import com.asinking.com.openapi.dto.response.PurchasePlanCreateResponse;
+import com.asinking.com.openapi.entity.InventoryOverviewEntity;
 import com.asinking.com.openapi.entity.WarehouseEntity;
 import com.asinking.com.openapi.mapper.mp.EbayShopListMapper;
+import com.asinking.com.openapi.mapper.mp.InventoryOverviewMapper;
 import com.asinking.com.openapi.service.EbayProductDedupService;
-import com.asinking.com.openapi.service.InventoryOverviewService;
 import com.asinking.com.openapi.service.LingxingPurchasePlanService;
 import com.asinking.com.openapi.service.WarehouseService;
+import com.asinking.com.openapi.utils.InventoryUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,18 +28,18 @@ public class PurchasePlanController {
     private final LingxingPurchasePlanService service;
     private final EbayShopListMapper ebayShopMapper;
     private final WarehouseService warehouseService;
-    private final InventoryOverviewService overviewService;
+    private final InventoryOverviewMapper overviewMapper;
     private final EbayProductDedupService dedupService;
 
     public PurchasePlanController(LingxingPurchasePlanService service,
                                   EbayShopListMapper ebayShopMapper,
                                   WarehouseService warehouseService,
-                                  InventoryOverviewService overviewService,
+                                  InventoryOverviewMapper overviewMapper,
                                   EbayProductDedupService dedupService) {
         this.service = service;
         this.ebayShopMapper = ebayShopMapper;
         this.warehouseService = warehouseService;
-        this.overviewService = overviewService;
+        this.overviewMapper = overviewMapper;
         this.dedupService = dedupService;
     }
 
@@ -112,54 +113,32 @@ public class PurchasePlanController {
      */
     @GetMapping("/product-info")
     public Result<Map<String, Object>> productInfo(@RequestParam String sku, @RequestParam Integer wid) {
-        // 提取 baseSku（前3段，如 RNG-80210-0557 → RNG-80210）
         String[] parts = sku.trim().split("-");
         String baseSku = parts.length >= 2 ? parts[0] + "-" + parts[1] : sku.trim();
-
-        // wid → 站点标签（注意：warehouse 表主键是 id，需要用 wid 字段查）
         WarehouseEntity wh = warehouseService.getByWid(wid);
         String siteLabel = wh != null ? whNameToSite(wh.getName()) : "";
 
-        // 匹配运营数据
-        InventoryOverviewItem matched = null;
+        Map<String, Object> result = new LinkedHashMap<>();
         if (!siteLabel.isEmpty()) {
-            for (InventoryOverviewItem item : overviewService.buildOverview()) {
-                if (baseSku.equals(item.getSku()) && siteLabel.equals(item.getWarehouseNames())) {
-                    matched = item;
-                    break;
+            for (InventoryOverviewEntity e : overviewMapper.selectList(null)) {
+                if (baseSku.equals(e.getSku()) && siteLabel.equals(e.getWarehouseNames())) {
+                    BigDecimal profitRate = e.getLast30DaysProfit();
+                    int sales = e.getLast30DaysSales() != null ? e.getLast30DaysSales() : 0;
+                    result.put("profitRate", profitRate);
+                    result.put("sales", sales);
+                    result.put("level", InventoryUtils.calcProductLevel(sales, profitRate != null ? profitRate.doubleValue() : 0));
+                    result.put("maxReplenish", e.getMaxMonthlyReplenish());
+                    result.put("purchaseQuantity", e.getPurchaseQuantity());
+                    return Result.ok(result);
                 }
             }
         }
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        if (matched != null) {
-            BigDecimal profitRate = matched.getLast30DaysProfit();
-            int sales = matched.getLast30DaysSales();
-            String level = calcProductLevel(sales, profitRate != null ? profitRate.doubleValue() : 0);
-
-            result.put("profitRate", profitRate);
-            result.put("sales", sales);
-            result.put("level", level);
-            result.put("maxReplenish", matched.getMaxMonthlyReplenish());
-            result.put("purchaseQuantity", matched.getPurchaseQuantity());
-        } else {
-            result.put("profitRate", null);
-            result.put("sales", 0);
-            result.put("level", "—");
-            result.put("maxReplenish", null);
-            result.put("purchaseQuantity", null);
-        }
+        result.put("profitRate", null);
+        result.put("sales", 0);
+        result.put("level", "—");
+        result.put("maxReplenish", null);
+        result.put("purchaseQuantity", null);
         return Result.ok(result);
-    }
-
-    /** 根据月销和利润率计算产品等级。 */
-    private String calcProductLevel(int sales, double profitRate) {
-        if (sales >= 30 && profitRate >= 20) return "S";
-        if (sales >= 15 && profitRate >= 20) return "A";
-        if (sales >= 10 && profitRate >= 18) return "B";
-        if ((sales >= 10 && profitRate >= 10) || (sales >= 5 && sales < 10 && profitRate >= 15)) return "C";
-        if ((sales < 5 && profitRate >= 15) || (sales >= 5 && sales < 10 && profitRate >= 10 && profitRate < 15)) return "D";
-        return "E";
     }
 
     /** 仓库名称 → 站点标签，与运营数据中的 warehouseNames 保持一致。 */

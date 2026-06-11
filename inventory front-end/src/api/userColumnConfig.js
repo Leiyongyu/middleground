@@ -17,7 +17,7 @@ export async function loadColumnConfig(pageKey = 'dashboard') {
 /** 保存当前用户 dashboard 列配置到后端 */
 export async function saveColumnConfig(keys, pageKey = 'dashboard') {
   try {
-    await apiPost('/api/user-column-config', JSON.stringify(keys), { query: { pageKey } })
+    await apiPost('/api/user-column-config', keys, { query: { pageKey } })
     return true
   } catch {
     return false
