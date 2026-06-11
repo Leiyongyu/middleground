@@ -561,21 +561,35 @@ public class DailyPriceTrackingServiceImpl implements DailyPriceTrackingService 
                 if (field == null || val == null || val.isEmpty()) continue;
                 String raw = val.trim();
                 if (isNumericKey(field)) {
+                    final String op; final double target;
                     String[] parsed = parseNumFilter(raw, isPercentKey(field));
                     if (parsed != null) {
-                        String op = parsed[0]; double target = Double.parseDouble(parsed[1]);
-                        allRows = allRows.stream().filter(item -> {
-                            Double dv = getNumVal(item, field);
-                            if (dv == null) return false;
-                            switch (op) {
-                                case ">": return dv > target; case ">=": return dv >= target;
-                                case "<": return dv < target; case "<=": return dv <= target;
-                                case "=": return Math.abs(dv - target) < 1e-10;
-                                default: return false;
-                            }
-                        }).collect(Collectors.toList());
-                        continue;
+                        op = parsed[0]; target = Double.parseDouble(parsed[1]);
+                    } else {
+                        try {
+                            double v = Double.parseDouble(raw);
+                            if (isPercentKey(field)) v /= 100.0;
+                            target = v; op = "=";
+                        } catch (NumberFormatException e) {
+                            String kw = raw.toLowerCase();
+                            allRows = allRows.stream().filter(item -> {
+                                String fv = getFieldStr(item, field);
+                                return fv != null && fv.toLowerCase().contains(kw);
+                            }).collect(Collectors.toList());
+                            continue;
+                        }
                     }
+                    allRows = allRows.stream().filter(item -> {
+                        Double dv = getNumVal(item, field);
+                        if (dv == null) return false;
+                        switch (op) {
+                            case ">": return dv > target; case ">=": return dv >= target;
+                            case "<": return dv < target; case "<=": return dv <= target;
+                            case "=": return Math.abs(dv - target) < 1e-10;
+                            default: return false;
+                        }
+                    }).collect(Collectors.toList());
+                    continue;
                 }
                 // 文本筛选
                 if (raw.contains(",")) {

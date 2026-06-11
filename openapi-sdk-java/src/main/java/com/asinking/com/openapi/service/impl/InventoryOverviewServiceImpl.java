@@ -135,24 +135,41 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 String fieldName = f.getField().trim();
                 // 数值字段：尝试解析比较运算符（> < >= <= =）
                 if (isNumericField(fieldName)) {
+                    final String op;
+                    final double target;
                     String[] parsed = parseNumericFilter(raw, isPercentageField(fieldName));
                     if (parsed != null) {
-                        String op = parsed[0];
-                        double target = Double.parseDouble(parsed[1]);
-                        filtered = filtered.stream().filter(item -> {
-                            Double val = getNumericValue(item, fieldName);
-                            if (val == null) return false;
-                            switch (op) {
-                                case ">":  return val > target;
-                                case ">=": return val >= target;
-                                case "<":  return val < target;
-                                case "<=": return val <= target;
-                                case "=":  return Math.abs(val - target) < 1e-10;
-                                default:   return val.toString().toLowerCase().contains(raw.toLowerCase());
-                            }
-                        }).collect(Collectors.toList());
-                        continue;
+                        op = parsed[0];
+                        target = Double.parseDouble(parsed[1]);
+                    } else {
+                        try {
+                            double v = Double.parseDouble(raw);
+                            if (isPercentageField(fieldName)) v /= 100.0;
+                            target = v;
+                            op = "=";
+                        } catch (NumberFormatException e) {
+                            // 不是数字也不是运算符 → 按文本模糊
+                            String kw = raw.toLowerCase();
+                            filtered = filtered.stream().filter(item -> {
+                                String val = getTextField(item, fieldName);
+                                return val != null && val.toLowerCase().contains(kw);
+                            }).collect(Collectors.toList());
+                            continue;
+                        }
                     }
+                    filtered = filtered.stream().filter(item -> {
+                        Double val = getNumericValue(item, fieldName);
+                        if (val == null) return false;
+                        switch (op) {
+                            case ">":  return val > target;
+                            case ">=": return val >= target;
+                            case "<":  return val < target;
+                            case "<=": return val <= target;
+                            case "=":  return Math.abs(val - target) < 1e-10;
+                            default:   return false;
+                        }
+                    }).collect(Collectors.toList());
+                    continue;
                 }
                 // 文本多选或模糊搜索
                 if (raw.contains(",")) {

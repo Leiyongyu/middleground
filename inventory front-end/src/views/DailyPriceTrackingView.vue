@@ -23,6 +23,7 @@ async function loadData() {
     const result = await fetchDailyPriceTracking(body)
     records.value = result?.records || []
     total.value = Number(result?.total || 0)
+    updatedAt.value = new Date().toISOString().slice(0,19).replace('T',' ')
   } finally { loading.value = false }
 }
 
@@ -117,6 +118,7 @@ function renderSortIcon(key) {
 const remarkInputs = {}  // key: "site|sku" → 当前输入值
 const oeInputs = {}       // key: "site|sku" → 当前 OE 输入值
 
+const updatedAt = ref('')
 const tableMaxHeight = 680
 
 onMounted(async () => {
@@ -399,25 +401,22 @@ const checkedRowKeys = ref([])
 
 <template>
   <div class="dashboard-page">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <h2 class="users-title" style="margin:0">每日跟价</h2>
-      <NSpace>
-        <NButton @click="handleRefresh" :loading="loading">刷新</NButton>
-        <NDropdown trigger="click" :options="importExportOptions" @select="handleDropdownSelect">
-          <NButton type="primary" :loading="importExportLoading">导入导出</NButton>
-        </NDropdown>
-        <NButton size="small" round @click="openDrawer" title="列设置">
-          <template #icon>
-            <svg viewBox="0 0 1024 1024" width="14" height="14"><path fill="currentColor" d="M512 938.666667a32.032 32.032 0 0 1-15.648-4.085334l-352-197.333333A32 32 0 0 1 128 709.333333v-394.666666a32 32 0 0 1 16.352-27.914667l352-197.333333a32 32 0 0 1 31.296 0l352 197.333333A32 32 0 0 1 896 314.666667v394.666666a32 32 0 0 1-16.352 27.914667l-352 197.333333A32 32 0 0 1 512 938.666667zM192 690.581333L512 869.973333l320-179.392V333.408L512 154.016 192 333.408v357.173333zM512 682.666667c-94.101333 0-170.666667-76.565333-170.666667-170.666667S417.898667 341.333333 512 341.333333s170.666667 76.565333 170.666667 170.666667-76.565333 170.666667-170.666667 170.666667z m0-277.333334c-58.816 0-106.666667 47.850667-106.666667 106.666667s47.850667 106.666667 106.666667 106.666667 106.666667-47.850667 106.666667-106.666667S570.816 405.333333 512 405.333333z"/></svg>
-          </template>
-        </NButton>
-      </NSpace>
-    </div>
-
     <div class="table-card-wrap">
-    <NCard size="small">
+    <NCard title="每日跟价" size="large">
       <template #header-extra>
-        <NTag size="small" :bordered="false">共 {{ total }} 条</NTag>
+        <NSpace align="center" size="small">
+          <NTag type="info" :bordered="false" size="small">更新 {{ updatedAt || '-' }}</NTag>
+          <NTag size="small" :bordered="false" type="default">共 {{ total }} 条</NTag>
+          <NButton size="small" secondary :loading="loading" @click="handleRefresh">刷新</NButton>
+          <NDropdown trigger="click" :options="importExportOptions" @select="handleDropdownSelect">
+            <NButton size="small" type="info" :loading="importExportLoading">导入导出</NButton>
+          </NDropdown>
+          <NButton size="small" round @click="openDrawer" title="列设置">
+            <template #icon>
+              <svg viewBox="0 0 1024 1024" width="14" height="14"><path fill="currentColor" d="M512 938.666667a32.032 32.032 0 0 1-15.648-4.085334l-352-197.333333A32 32 0 0 1 128 709.333333v-394.666666a32 32 0 0 1 16.352-27.914667l352-197.333333a32 32 0 0 1 31.296 0l352 197.333333A32 32 0 0 1 896 314.666667v394.666666a32 32 0 0 1-16.352 27.914667l-352 197.333333A32 32 0 0 1 512 938.666667zM192 690.581333L512 869.973333l320-179.392V333.408L512 154.016 192 333.408v357.173333zM512 682.666667c-94.101333 0-170.666667-76.565333-170.666667-170.666667S417.898667 341.333333 512 341.333333s170.666667 76.565333 170.666667 170.666667-76.565333 170.666667-170.666667 170.666667z m0-277.333334c-58.816 0-106.666667 47.850667-106.666667 106.666667s47.850667 106.666667 106.666667 106.666667 106.666667-47.850667 106.666667-106.666667S570.816 405.333333 512 405.333333z"/></svg>
+            </template>
+          </NButton>
+        </NSpace>
       </template>
 
       <!-- 筛选标签 -->
