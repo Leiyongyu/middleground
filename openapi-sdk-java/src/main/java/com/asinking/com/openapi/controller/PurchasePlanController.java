@@ -9,17 +9,19 @@ import com.asinking.com.openapi.mapper.mp.EbayShopListMapper;
 import com.asinking.com.openapi.mapper.mp.InventoryOverviewMapper;
 import com.asinking.com.openapi.service.EbayProductDedupService;
 import com.asinking.com.openapi.service.LingxingPurchasePlanService;
+import com.asinking.com.openapi.service.UserPermissionService;
 import com.asinking.com.openapi.service.WarehouseService;
 import com.asinking.com.openapi.utils.InventoryUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 采购计划接口，提供 Excel 上传/JSON 创建计划，以及 SKU/店铺/仓库的搜索提示。
+ * 采购计划接口。
  */
 @RestController
 @RequestMapping("/api/purchase-plan")
@@ -30,17 +32,23 @@ public class PurchasePlanController {
     private final WarehouseService warehouseService;
     private final InventoryOverviewMapper overviewMapper;
     private final EbayProductDedupService dedupService;
+    private final UserPermissionService permService;
+    private final HttpServletRequest request;
 
     public PurchasePlanController(LingxingPurchasePlanService service,
                                   EbayShopListMapper ebayShopMapper,
                                   WarehouseService warehouseService,
                                   InventoryOverviewMapper overviewMapper,
-                                  EbayProductDedupService dedupService) {
+                                  EbayProductDedupService dedupService,
+                                  UserPermissionService permService,
+                                  HttpServletRequest request) {
         this.service = service;
         this.ebayShopMapper = ebayShopMapper;
         this.warehouseService = warehouseService;
         this.overviewMapper = overviewMapper;
         this.dedupService = dedupService;
+        this.permService = permService;
+        this.request = request;
     }
 
     /** 上传 Excel 文件并创建采购计划。 */
@@ -56,13 +64,15 @@ public class PurchasePlanController {
         return Result.ok(service.createFromJson(data));
     }
 
-    /** 从去重表搜索 SKU，已去重，直接返回。 */
+    /** 从去重表搜索 SKU，非管理员只返回自己负责的品牌 */
     @GetMapping("/skus")
     public Result<List<Map<String, Object>>> searchSkus(@RequestParam(defaultValue = "") String keyword) {
+        UserPermissionService.UserPermission perm = permService.fromRequest(request);
         Set<String> skus = new LinkedHashSet<>();
         for (var e : dedupService.listAll()) {
             String s = e.getSku();
             if (s == null || s.isEmpty()) continue;
+            if (!perm.canViewSku(s)) continue;
             if (keyword.isEmpty() || s.toLowerCase().contains(keyword.toLowerCase()))
                 skus.add(s);
         }
@@ -113,6 +123,9 @@ public class PurchasePlanController {
      */
     @GetMapping("/product-info")
     public Result<Map<String, Object>> productInfo(@RequestParam String sku, @RequestParam Integer wid) {
+        UserPermissionService.UserPermission perm = permService.fromRequest(request);
+        if (!perm.canViewSku(sku)) return Result.ok(null);
+
         String[] parts = sku.trim().split("-");
         String baseSku = parts.length >= 2 ? parts[0] + "-" + parts[1] : sku.trim();
         WarehouseEntity wh = warehouseService.getByWid(wid);
@@ -141,13 +154,8 @@ public class PurchasePlanController {
         return Result.ok(result);
     }
 
-    /** 仓库名称 → 站点标签，与运营数据中的 warehouseNames 保持一致。 */
+    /** 仓库名称 → 站点标签，委托 InventoryUtils 统一处理。 */
     private String whNameToSite(String name) {
-        if (name == null || name.isEmpty()) return "";
-        if (name.startsWith("CTUAMZ")) return "";
-        if (name.contains("-US") || name.contains("加州") || name.contains("新泽西")) return "美国";
-        if (name.contains("-DE") || name.contains("德国")) return "德国";
-        if (name.contains("-UK") || name.contains("英国")) return "英国";
-        return "";
+        return InventoryUtils.whNameToSite(name);
     }
 }

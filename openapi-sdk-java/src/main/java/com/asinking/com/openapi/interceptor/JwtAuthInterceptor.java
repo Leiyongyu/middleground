@@ -56,8 +56,8 @@ public class JwtAuthInterceptor implements HandlerInterceptor {
 
             request.setAttribute(ATTR_JTI, jti);
             request.setAttribute(ATTR_ACCOUNT, claims.getSubject());
-            request.setAttribute(ATTR_ROLE, String.valueOf(claims.get("role")));
-            request.setAttribute(ATTR_USER_ID, String.valueOf(claims.get("uid")));
+            request.setAttribute(ATTR_ROLE, claims.get("role") != null ? String.valueOf(claims.get("role")) : "user");
+            request.setAttribute(ATTR_USER_ID, claims.get("uid") != null ? String.valueOf(claims.get("uid")) : "");
             return true;
         } catch (Exception e) {
             writeUnauthorized(response, "Invalid token");

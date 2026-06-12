@@ -35,5 +35,11 @@ public interface EbayProductDedupService {
     /** 从 Excel 导入退货率，按中间码精确匹配更新 return_rate */
     java.util.Map<String, Object> importReturnRate(byte[] fileBytes);
 
+    /** 批量查询最低价，返回 site|sku → lowestPrice */
+    Map<String, java.math.BigDecimal> batchGetLowestPrices();
+
+    /** 从 Excel 导入最低价（按 site+sku 保留最低价，增量 upsert） */
+    Map<String, Object> importLowestPrice(byte[] fileBytes, String fileName);
+
     List<EbayProductDedupEntity> listAll();
 }

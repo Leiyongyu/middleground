@@ -115,8 +115,9 @@ function renderSortIcon(key) {
 }
 
 // ===== 备注编辑状态（非受控 NInput 模式） =====
-const remarkInputs = {}  // key: "site|sku" → 当前输入值
-const oeInputs = {}       // key: "site|sku" → 当前 OE 输入值
+const remarkInputs = {}   // key: "site|sku" → 当前输入值
+const oeInputs = {}        // key: "site|sku" → 当前 OE 输入值
+const pendingEdits = {}    // key → true/false 防重复提交
 
 const updatedAt = ref('')
 const tableMaxHeight = 680
@@ -126,7 +127,7 @@ onMounted(async () => {
   loadData()
   document.addEventListener('click', onDocClick)
 })
-onUnmounted(() => { document.removeEventListener('click', onDocClick) })
+onUnmounted(() => { document.removeEventListener('click', onDocClick); clearTimeout(filterTimer) })
 
 async function handleRefresh() {
   if (loading.value) return
@@ -346,12 +347,16 @@ const columns = [
         onBlur: async () => {
           const newVal = remarkInputs[key] || ''
           if (newVal === (row.remark || '')) return
+          if (pendingEdits[key]) return
+          pendingEdits[key] = true
           try {
             await saveRemark(row.site, row.sku, newVal)
             row.remark = newVal
             message.success('备注已保存')
           } catch (e) {
             message.error('保存失败')
+          } finally {
+            pendingEdits[key] = false
           }
         },
         onClear: () => {

@@ -42,7 +42,7 @@ public class PurchasePlanEntity {
     @TableField("warehouse_name") private String warehouseName;
     @TableField("purchaser_id") private Integer purchaserId;
     @TableField("purchaser_name") private String purchaserName;
-    @TableField("create_time") private String createTime;
+    @TableField("create_time") private LocalDateTime createTime;
     @TableField("plan_remark") private String planRemark;
     @TableField("attribute_json") private String attributeJson;
     @TableField("file_json") private String fileJson;

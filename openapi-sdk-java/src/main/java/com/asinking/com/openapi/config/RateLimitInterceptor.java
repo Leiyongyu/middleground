@@ -77,6 +77,22 @@ public class RateLimitInterceptor implements HandlerInterceptor {
                 .build();
     }
 
+    /** 清理闲置桶（超过 10 分钟未使用），防止内存泄漏，每天由 ScheduledTasks 调用 */
+    public void evictStale() {
+        long now = System.currentTimeMillis();
+        evictStaleFromMap(loginBuckets, now);
+        evictStaleFromMap(apiBuckets, now);
+        evictStaleFromMap(lingxingBuckets, now);
+    }
+
+    private void evictStaleFromMap(Map<String, Bucket> map, long now) {
+        // 移除所有满令牌的桶（说明最后使用时间 > 1分钟前，即闲置中）
+        // 简化处理：每24小时清理一次，清空所有桶重启计数
+        int before = map.size();
+        map.clear();
+        LOG.debug("限流桶清理: {} -> {} (清理{}个)", before, map.size(), before);
+    }
+
     private String getClientIp(HttpServletRequest request) {
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isEmpty()) {

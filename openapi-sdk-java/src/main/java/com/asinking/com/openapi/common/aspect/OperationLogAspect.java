@@ -97,7 +97,7 @@ public class OperationLogAspect {
 
             String status = fail > 0 ? "成功(有跳过)" : "成功";
             String target = anno.target() != null && !anno.target().isEmpty() ? anno.target() : apiPath;
-            logService.log(apiPath, httpMethod, operator, ipAddress,
+            logService.logAsync(apiPath, httpMethod, operator, ipAddress,
                     anno.value(), target, status, total, success, fail, null, details);
             LOG.info("[AOP] {} {} {} -> success({}) fail({}) {}ms",
                     httpMethod, apiPath, anno.target(), success, fail, System.currentTimeMillis() - start);
@@ -108,7 +108,7 @@ public class OperationLogAspect {
             Map<String, Object> errDetail = new LinkedHashMap<>();
             errDetail.put("error", e.getMessage());
             errDetail.put("errorType", e.getClass().getSimpleName());
-            logService.log(apiPath, httpMethod, operator, ipAddress,
+            logService.logAsync(apiPath, httpMethod, operator, ipAddress,
                     anno.value(), target, "失败", 0, 0, 0, e.getMessage(), JSON.toJSONString(errDetail));
             LOG.error("[AOP] {} {} {} -> FAIL: {} ({}ms)",
                     httpMethod, apiPath, anno.target(), e.getMessage(), System.currentTimeMillis() - start);

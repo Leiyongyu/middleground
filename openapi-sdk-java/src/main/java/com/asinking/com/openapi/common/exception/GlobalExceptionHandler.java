@@ -25,6 +25,10 @@ public class GlobalExceptionHandler {
     /** 业务异常：HTTP 200，body 中携带具体业务错误码 */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<Result<?>> handleBusiness(BusinessException e) {
+        if (e.getResultCode() == ResultCode.FORBIDDEN) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Result.fail(e.getResultCode(), e.getMessage()));
+        }
         return ResponseEntity.ok(Result.fail(e.getResultCode(), e.getMessage()));
     }
 

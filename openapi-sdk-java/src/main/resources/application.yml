@@ -53,8 +53,10 @@ jwt:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+    enabled: ${SPRINGDOC_ENABLED:false}
   api-docs:
     path: /v3/api-docs
+    enabled: ${SPRINGDOC_ENABLED:false}
 
 logging:
   level:

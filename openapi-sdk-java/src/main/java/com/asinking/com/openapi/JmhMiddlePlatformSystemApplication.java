@@ -5,7 +5,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * 聚米汇中台系统启动类，基于 Spring Boot 2.7，对接领星 OpenAPI。
+ * 聚米汇中台系统启动类。
+ * @EnableAsync 已由 AsyncConfig 统一配置。
  */
 @SpringBootApplication
 @EnableScheduling

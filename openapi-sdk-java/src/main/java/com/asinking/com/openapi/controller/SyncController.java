@@ -27,6 +27,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -45,6 +49,7 @@ public class SyncController {
     private final GoodcangSyncService goodcangSyncService;
     private final GoodcangProductService goodcangProductService;
     private final InventoryOverviewService overviewService;
+    private final com.asinking.com.openapi.service.DailyPriceTrackingService trackingService;
     private final OperationLogService logService;
     private final HttpServletRequest request;
     private final JwtTokenService jwtTokenService;
@@ -59,6 +64,7 @@ public class SyncController {
                           GoodcangSyncService goodcangSyncService,
                           GoodcangProductService goodcangProductService,
                           InventoryOverviewService overviewService,
+                          com.asinking.com.openapi.service.DailyPriceTrackingService trackingService,
                           OperationLogService logService,
                           JwtTokenService jwtTokenService,
                           RedissonClient redissonClient,
@@ -72,6 +78,7 @@ public class SyncController {
         this.goodcangSyncService = goodcangSyncService;
         this.goodcangProductService = goodcangProductService;
         this.overviewService = overviewService;
+        this.trackingService = trackingService;
         this.logService = logService;
         this.jwtTokenService = jwtTokenService;
         this.redissonClient = redissonClient;
@@ -95,80 +102,67 @@ public class SyncController {
             return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "同步任务正在执行中，请稍后再试");
         }
         try {
-        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Object> result = new ConcurrentHashMap<>();
         long totalStart = System.currentTimeMillis();
         LocalDate now = LocalDate.now();
         String apiPath = "/api/sync/all";
         String operator = getCurrentUser();
         String ip = getClientIp();
-        // 认证失败标记：一个领星接口认证失败，后续领星接口直接跳过
-        boolean[] authFailed = {false};
 
-        // 仓库
-        result.put("warehouse", runStepWithAuth("同步外服", "领星-仓库信息", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            WarehouseSyncResponse r = warehouseService.syncOverseaWarehouses(new WarehouseSyncRequest());
-            return map("inserted", r.getInserted(), "updated", r.getUpdated(), "elapsed", ms(t));
-        }, authFailed));
-
-        // eBay商品
-        result.put("ebayItems", runStepWithAuth("同步外服", "领星-eBay商品刊登", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            var r = ebayService.syncAllEbayItems(null);
-            return map("total", r.getRemoteTotal(), "elapsed", ms(t));
-        }, authFailed));
-
-        // 库存
-        result.put("inventory", runStepWithAuth("同步外服", "领星-库存明细", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            WarehouseInventoryDetailSyncResponse r = inventoryService.syncAllInventoryDetails(null);
-            return map("inserted", r.getInserted(), "elapsed", ms(t));
-        }, authFailed));
-
-        // 谷仓仓库
-        result.put("goodcangWarehouses", runStepWithAuth("同步外服", "谷仓-仓库信息", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            var r = goodcangSyncService.syncWarehouses();
-            return map("inserted", r.getInserted(), "elapsed", ms(t));
-        }, authFailed));
-
-        // 谷仓入库单
-        result.put("goodcangGrn", runStepWithAuth("同步外服", "谷仓-入库单", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            String to = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-            var r = goodcangSyncService.syncGrn("2026-01-01 00:00:00", to);
-            return map("inserted", r.getInserted(), "elapsed", ms(t));
-        }, authFailed));
-
-        // 库存流水
-        result.put("statement", runStepWithAuth("同步外服", "领星-库存流水", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            var r = statementService.syncStatements(now.minusDays(90).toString(), now.toString());
-            return map("inserted", r.getInserted(), "elapsed", ms(t));
-        }, authFailed));
-
-        // 采购单
-        result.put("purchaseOrder", runStepWithAuth("同步外服", "领星-采购单", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            var r = purchaseOrderService.sync(now.minusDays(90).toString(), now.toString());
-            return map("inserted", r.getInserted(), "elapsed", ms(t));
-        }, authFailed));
-
-        // 谷仓商品信息同步
-        result.put("goodcangProducts", runStepWithAuth("同步外服", "谷仓-商品信息", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            var r = goodcangProductService.syncFromApi();
-            return map("total", intValObj(r, "total"), "inserted", intValObj(r, "inserted"), "updated", intValObj(r, "updated"), "skipped", intValObj(r, "skipped"), "elapsed", ms(t));
-        }, authFailed));
-
-        result.put("purchasePlan", runStepWithAuth("同步外服", "领星-采购计划", apiPath, operator, ip, () -> {
-            long t = System.currentTimeMillis();
-            var r = purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString());
-            return map("inserted", r.getInserted(), "elapsed", ms(t));
-        }, authFailed));
+        // 所有外部接口并行调用
+        CompletableFuture<Void> all = CompletableFuture.allOf(
+            runAsync("warehouse", "领星-仓库信息", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                WarehouseSyncResponse r = warehouseService.syncOverseaWarehouses(new WarehouseSyncRequest());
+                return map("inserted", r.getInserted(), "updated", r.getUpdated(), "elapsed", ms(t));
+            }, result),
+            runAsync("ebayItems", "领星-eBay商品刊登", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = ebayService.syncAllEbayItems(null);
+                return map("total", r.getRemoteTotal(), "elapsed", ms(t));
+            }, result),
+            runAsync("inventory", "领星-库存明细", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                WarehouseInventoryDetailSyncResponse r = inventoryService.syncAllInventoryDetails(null);
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("goodcangWarehouses", "谷仓-仓库信息", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = goodcangSyncService.syncWarehouses();
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("goodcangGrn", "谷仓-入库单", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                String to = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                var r = goodcangSyncService.syncGrn("2026-01-01 00:00:00", to);
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("statement", "领星-库存流水", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = statementService.syncStatements(now.minusDays(90).toString(), now.toString());
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("purchaseOrder", "领星-采购单", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = purchaseOrderService.sync(now.minusDays(90).toString(), now.toString());
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("goodcangProducts", "谷仓-商品信息", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = goodcangProductService.syncFromApi();
+                return map("total", intValObj(r, "total"), "inserted", intValObj(r, "inserted"), "updated", intValObj(r, "updated"), "skipped", intValObj(r, "skipped"), "elapsed", ms(t));
+            }, result),
+            runAsync("purchasePlan", "领星-采购计划", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString());
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result)
+        );
+        all.join(); // 等待全部完成
 
         result.put("total_elapsed", (System.currentTimeMillis() - totalStart) / 1000 + "s");
         try { overviewService.refreshSnapshot(); } catch (Exception ignored) {}
+        try { trackingService.refreshTable(); } catch (Exception ignored) {}
 
         return Result.ok(result);
         } finally {
@@ -176,22 +170,24 @@ public class SyncController {
         }
     }
 
-    private boolean isAuthError(String msg) {
-        if (msg == null) return false;
-        msg = msg.toLowerCase();
-        return msg.contains("token") || msg.contains("登录") || msg.contains("expired") || msg.contains("auth") || msg.contains("401") || msg.contains("403");
+    /** 专用于 I/O 密集型同步任务的线程池，避免占用 ForkJoinPool.commonPool() */
+    private static final ExecutorService SYNC_EXECUTOR = Executors.newFixedThreadPool(10, r -> {
+        Thread t = new Thread(r, "sync-io");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** 异步执行一个同步步骤，返回 CompletableFuture 将结果写入 result Map */
+    private CompletableFuture<Void> runAsync(String key, String target, String apiPath,
+                                              String operator, String ip, StepRunner runner,
+                                              Map<String, Object> result) {
+        return CompletableFuture.runAsync(() -> {
+            result.put(key, runStep("同步外服", target, apiPath, operator, ip, runner));
+        }, SYNC_EXECUTOR);
     }
 
-    private Map<String, Object> runStepWithAuth(String opType, String target, String apiPath,
-                                                  String operator, String ip, StepRunner runner,
-                                                  boolean[] authFailed) {
-        if (authFailed[0]) {
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("step_target", target); details.put("step_status", "已跳过(登录过期)");
-            logService.log(apiPath, "POST", operator, ip, opType, target, "已跳过", 0, 0, 0, "前序认证失败", JSON.toJSONString(details));
-            Map<String, Object> r = new LinkedHashMap<>();
-            r.put("inserted", 0); r.put("updated", 0); r.put("elapsed", "0s"); return r;
-        }
+    private Map<String, Object> runStep(String opType, String target, String apiPath,
+                                         String operator, String ip, StepRunner runner) {
         long start = System.currentTimeMillis();
         try {
             Map<String, Object> stepResult = runner.run();
@@ -209,7 +205,6 @@ public class SyncController {
             return stepResult;
         } catch (Exception e) {
             String elapsed = (System.currentTimeMillis() - start) / 1000.0 + "s";
-            if (isAuthError(e.getMessage())) authFailed[0] = true;
             Map<String, Object> details = new LinkedHashMap<>();
             details.put("step_target", target); details.put("step_status", "失败"); details.put("step_elapsed", elapsed);
             details.put("error", e.getMessage());

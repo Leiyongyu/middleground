@@ -24,27 +24,32 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws java.io.IOException, jakarta.servlet.ServletException {
         long start = System.currentTimeMillis();
-        ContentCachingRequestWrapper reqWrapper = new ContentCachingRequestWrapper(request);
+        String method = request.getMethod();
+        boolean isBodyMethod = "POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "PATCH".equalsIgnoreCase(method);
+
+        // 仅对有请求体的方法缓存 body，GET/DELETE 直接放行
+        ContentCachingRequestWrapper reqWrapper = isBodyMethod ? new ContentCachingRequestWrapper(request) : null;
         ContentCachingResponseWrapper respWrapper = new ContentCachingResponseWrapper(response);
 
         try {
-            filterChain.doFilter(reqWrapper, respWrapper);
+            filterChain.doFilter(reqWrapper != null ? reqWrapper : request, respWrapper);
         } finally {
             long elapsed = System.currentTimeMillis() - start;
-            String method = request.getMethod();
             String uri = request.getRequestURI();
             String query = request.getQueryString();
             int status = response.getStatus();
 
             // 读取请求体，脱敏后输出
             String reqBody = "";
-            byte[] reqBytes = reqWrapper.getContentAsByteArray();
-            if (reqBytes.length > 0) {
-                reqBody = new String(reqBytes, StandardCharsets.UTF_8);
-                // 脱敏：password/token/secret 等敏感字段替换为 ***
-                reqBody = reqBody.replaceAll("\"(password|token|secret|appSecret|apiKey|Authorization)\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"***\"");
-                if (reqBody.length() > 500) {
-                    reqBody = reqBody.substring(0, 500) + "...";
+            if (reqWrapper != null) {
+                byte[] reqBytes = reqWrapper.getContentAsByteArray();
+                if (reqBytes.length > 0) {
+                    reqBody = new String(reqBytes, StandardCharsets.UTF_8);
+                    // 脱敏：password/token/secret 等敏感字段替换为 ***
+                    reqBody = reqBody.replaceAll("\"(password|token|secret|appSecret|apiKey|Authorization)\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"***\"");
+                    if (reqBody.length() > 500) {
+                        reqBody = reqBody.substring(0, 500) + "...";
+                    }
                 }
             }
 

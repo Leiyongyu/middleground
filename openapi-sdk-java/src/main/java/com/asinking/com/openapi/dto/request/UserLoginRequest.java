@@ -1,8 +1,13 @@
 package com.asinking.com.openapi.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
+
 public class UserLoginRequest {
 
+    @NotBlank(message = "账号不能为空")
     private String account;
+
+    @NotBlank(message = "密码不能为空")
     private String password;
 
     public String getAccount() {

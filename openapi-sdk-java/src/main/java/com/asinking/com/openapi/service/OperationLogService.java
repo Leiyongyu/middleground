@@ -4,6 +4,7 @@ import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.entity.OperationLogEntity;
 import com.asinking.com.openapi.mapper.mp.OperationLogMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 
@@ -14,16 +15,31 @@ public class OperationLogService {
 
     public OperationLogService(OperationLogMapper mapper) { this.mapper = mapper; }
 
-    /** AOP 切面使用：写入含HTTP信息的完整日志 */
+    /** AOP 切面使用：异步写入，不阻塞业务响应 */
+    @Async
+    public void logAsync(String apiPath, String httpMethod, String operator, String ipAddress,
+                    String operationType, String target, String status,
+                    Integer total, Integer success, Integer fail, String error, String details) {
+        logSync(apiPath, httpMethod, operator, ipAddress, operationType, target, status,
+                total, success, fail, error, details);
+    }
+
     public void log(String apiPath, String httpMethod, String operator, String ipAddress,
                     String operationType, String target, String status,
                     Integer total, Integer success, Integer fail, String error) {
-        log(apiPath, httpMethod, operator, ipAddress, operationType, target, status,
+        logSync(apiPath, httpMethod, operator, ipAddress, operationType, target, status,
                 total, success, fail, error, null);
     }
 
     /** 写入含详细JSON的完整日志 */
     public void log(String apiPath, String httpMethod, String operator, String ipAddress,
+                    String operationType, String target, String status,
+                    Integer total, Integer success, Integer fail, String error, String details) {
+        logSync(apiPath, httpMethod, operator, ipAddress, operationType, target, status,
+                total, success, fail, error, details);
+    }
+
+    private void logSync(String apiPath, String httpMethod, String operator, String ipAddress,
                     String operationType, String target, String status,
                     Integer total, Integer success, Integer fail, String error, String details) {
         OperationLogEntity e = new OperationLogEntity();
@@ -57,15 +73,15 @@ public class OperationLogService {
                 .lt(OperationLogEntity::getCreateTime, cutoff));
     }
 
-    /** 分页查询 */
+    /** 分页查询（使用 MyBatis-Plus Page 避免 SQL 拼接） */
     public PageResult<OperationLogEntity> page(long page, long size) {
         long p = page <= 0 ? 1 : page;
         long s = size <= 0 ? 20 : Math.min(size, 100);
-        long total = mapper.selectCount(null);
-        var list = mapper.selectList(
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<OperationLogEntity> mpPage =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(p, s);
+        mpPage = mapper.selectPage(mpPage,
                 new LambdaQueryWrapper<OperationLogEntity>()
-                        .orderByDesc(OperationLogEntity::getId)
-                        .last("LIMIT " + ((p - 1) * s) + "," + s));
-        return new PageResult<>(total, p, s, list);
+                        .orderByDesc(OperationLogEntity::getId));
+        return new PageResult<>(mpPage.getTotal(), mpPage.getCurrent(), mpPage.getSize(), mpPage.getRecords());
     }
 }

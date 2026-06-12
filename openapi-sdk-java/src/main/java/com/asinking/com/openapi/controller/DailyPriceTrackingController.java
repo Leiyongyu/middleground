@@ -7,7 +7,6 @@ import com.asinking.com.openapi.dto.response.DailyPriceTrackingItem;
 import com.asinking.com.openapi.service.DailyPriceTrackingService;
 import com.asinking.com.openapi.service.EbayLinkTemplateService;
 import com.asinking.com.openapi.service.EbayProductDedupService;
-import com.asinking.com.openapi.service.LowestPriceRecordService;
 import com.asinking.com.openapi.utils.ExcelUtils;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -28,18 +27,18 @@ import java.util.*;
 public class DailyPriceTrackingController {
 
     private final DailyPriceTrackingService service;
-    private final LowestPriceRecordService lowestPriceService;
     private final EbayProductDedupService dedupService;
     private final EbayLinkTemplateService linkTemplateService;
+    private final com.asinking.com.openapi.service.UserPermissionService permService;
 
     public DailyPriceTrackingController(DailyPriceTrackingService service,
-                                        LowestPriceRecordService lowestPriceService,
                                         EbayProductDedupService dedupService,
-                                        EbayLinkTemplateService linkTemplateService) {
+                                        EbayLinkTemplateService linkTemplateService,
+                                        com.asinking.com.openapi.service.UserPermissionService permService) {
         this.service = service;
-        this.lowestPriceService = lowestPriceService;
         this.dedupService = dedupService;
         this.linkTemplateService = linkTemplateService;
+        this.permService = permService;
     }
 
     /** 重算并写入数据库 */
@@ -64,24 +63,36 @@ public class DailyPriceTrackingController {
         return Result.ok(service.search(page, size, filters, sortField, sortOrder, userId, role));
     }
 
-    /** 搜索字段去重值 */
+    /** 搜索字段去重值（非管理员按品牌权限过滤） */
     @GetMapping("/distinct-values")
     public Result<List<String>> distinctValues(
             @RequestParam String field,
-            @RequestParam(defaultValue = "") String keyword) {
-        return Result.ok(service.searchDistinctValues(field, keyword));
+            @RequestParam(defaultValue = "") String keyword,
+            jakarta.servlet.http.HttpServletRequest request) {
+        String userId = String.valueOf(request.getAttribute(com.asinking.com.openapi.interceptor.JwtAuthInterceptor.ATTR_USER_ID));
+        String role = String.valueOf(request.getAttribute(com.asinking.com.openapi.interceptor.JwtAuthInterceptor.ATTR_ROLE));
+        return Result.ok(service.searchDistinctValuesFiltered(field, keyword, userId, role));
     }
 
-    /** Excel 导出（传 ids 则只导出选中，否则导出筛选条件下的全量） */
+    /** Excel 导出（传 ids 则只导出选中，否则导出筛选条件下的全量，非管理员按品牌权限过滤） */
     @GetMapping("/export")
     public void export(@RequestParam(required = false) String site,
                        @RequestParam(required = false) String sku,
                        @RequestParam(required = false) String brand,
                        @RequestParam(required = false) String operator,
                        @RequestParam(required = false) String ids,
-                       HttpServletResponse response) throws Exception {
+                       HttpServletResponse response,
+                       jakarta.servlet.http.HttpServletRequest request) throws Exception {
         PageResult<DailyPriceTrackingItem> result = service.page(1, Integer.MAX_VALUE, site, sku, brand, operator, null, null);
         List<DailyPriceTrackingItem> records = result.getRecords();
+
+        // 品牌权限过滤
+        com.asinking.com.openapi.service.UserPermissionService.UserPermission perm = permService.fromRequest(request);
+        if (!perm.isAdmin && !perm.brands.isEmpty()) {
+            records = records.stream()
+                    .filter(r -> r.getBrand() != null && perm.brands.contains(r.getBrand().toUpperCase()))
+                    .collect(java.util.stream.Collectors.toList());
+        }
 
         // 有 ids 则只保留选中的行（key=site|sku）
         if (ids != null && !ids.isEmpty()) {
@@ -224,7 +235,7 @@ public class DailyPriceTrackingController {
     @PostMapping("/import-lowest-price")
     public Result<Map<String, Object>> importLowestPrice(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
         try {
-            Map<String, Object> stats = lowestPriceService.importFromExcel(
+            Map<String, Object> stats = dedupService.importLowestPrice(
                     file.getBytes(), file.getOriginalFilename());
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("total", stats.get("total"));

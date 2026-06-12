@@ -16,7 +16,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
-import org.apache.commons.codec.digest.DigestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> implements UserService {
 
-    private static final Pattern MD5_PATTERN = Pattern.compile("^[0-9a-fA-F]{32}$");
+    private static final Logger LOG = LoggerFactory.getLogger(UserServiceImpl.class);
 
     private final JwtTokenService jwtTokenService;
     private final TokenBlacklist tokenBlacklist;
@@ -73,7 +73,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         }
 
         JwtTokenService.TokenInfo tokenInfo = jwtTokenService.issue(user);
-        return new UserLoginResponse(tokenInfo.getToken(), tokenInfo.getExpiresAtMillis(), user.getAccount(), user.getRole(), user.getOwnerName());
+        return new UserLoginResponse(tokenInfo.getToken(), tokenInfo.getExpiresAtMillis(), user.getAccount(), user.getRole() != null && user.getRole() == 1 ? "admin" : "user", user.getOwnerName());
     }
 
     /** 解析 Bearer token 并将其加入黑名单。 */
@@ -116,7 +116,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         entity.setId(UUID.randomUUID().toString());
         entity.setAccount(account.trim());
         entity.setPassword(passwordEncoder.encode(password));
-        entity.setRole(role.trim());
+        entity.setRole(parseRole(role));
         entity.setOwnerName(trimmedOwnerName);
 
         boolean ok = save(entity);
@@ -139,7 +139,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         }
 
         if (StringUtils.hasText(role)) {
-            entity.setRole(role.trim());
+            entity.setRole(parseRole(role));
         }
         if (ownerName != null) {
             if (!StringUtils.hasText(ownerName)) {
@@ -197,34 +197,36 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
     public PageResult<UserResponse> pageUserResponses(long page, long size, String account, String role) {
         Page<UserEntity> result = pageUsers(page, size, account, role);
         List<UserEntity> records = result.getRecords() == null ? Collections.emptyList() : result.getRecords();
-        Map<String, BrandOwnerEntity> brandOwnerIndex = buildBrandOwnerIndex(records);
+        Map<String, List<String>> brandIndex = buildBrandIndex(records);
         List<UserResponse> responses = new ArrayList<>(records.size());
         for (UserEntity user : records) {
-            responses.add(toResponse(user, brandOwnerIndex));
+            responses.add(toResponse(user, brandIndex));
         }
         return new PageResult<>(result.getTotal(), result.getCurrent(), result.getSize(), responses);
     }
 
     /** 将 UserEntity 转为 UserResponse。 */
     private UserResponse toResponse(UserEntity entity) {
-        return toResponse(entity, buildBrandOwnerIndex(Collections.singletonList(entity)));
+        return toResponse(entity, buildBrandIndex(Collections.singletonList(entity)));
     }
 
-    /** 将 UserEntity 转为 UserResponse（携带品牌归属索引）。 */
-    private UserResponse toResponse(UserEntity entity, Map<String, BrandOwnerEntity> brandOwnerIndex) {
+    /** 将 UserEntity 转为 UserResponse（携带品牌归属索引，避免 N+1 查询） */
+    private UserResponse toResponse(UserEntity entity, Map<String, List<String>> brandIndex) {
         UserResponse resp = new UserResponse();
         resp.setId(entity.getId());
         resp.setAccount(entity.getAccount());
-        resp.setRole(entity.getRole());
+        resp.setRole(entity.getRole() != null && entity.getRole() == 1 ? "admin" : "user");
         resp.setOwnerName(entity.getOwnerName());
-        resp.setOwners(resolveOwnerBrands(entity.getOwnerName()));
+        // 从索引直接取品牌列表，避免每个用户一次 N+1 DB 查询
+        String key = StringUtils.hasText(entity.getOwnerName()) ? entity.getOwnerName().trim() : "";
+        resp.setOwners(brandIndex.getOrDefault(key, Collections.emptyList()));
         resp.setCreateTime(entity.getCreateTime());
         resp.setUpdateTime(entity.getUpdateTime());
         return resp;
     }
 
-    /** 根据用户列表构建 brandCode -> BrandOwnerEntity 索引。 */
-    private Map<String, BrandOwnerEntity> buildBrandOwnerIndex(List<UserEntity> users) {
+    /** 根据用户列表构建 ownerName → brandCode列表 索引（一次查询，无 N+1） */
+    private Map<String, List<String>> buildBrandIndex(List<UserEntity> users) {
         Set<String> ownerNames = new HashSet<>();
         for (UserEntity user : users) {
             if (user != null && StringUtils.hasText(user.getOwnerName())) {
@@ -234,38 +236,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         if (ownerNames.isEmpty()) {
             return Collections.emptyMap();
         }
-
         List<String> nameList = new ArrayList<>(ownerNames);
         List<BrandOwnerEntity> owners = brandOwnerService.lambdaQuery()
                 .in(BrandOwnerEntity::getOwnerName, nameList)
                 .list();
-
-        Map<String, BrandOwnerEntity> index = new HashMap<>();
+        Map<String, List<String>> index = new HashMap<>();
         if (owners != null) {
-            for (BrandOwnerEntity owner : owners) {
-                if (owner != null && StringUtils.hasText(owner.getBrandCode())) {
-                    index.put(owner.getBrandCode(), owner);
+            for (BrandOwnerEntity bo : owners) {
+                if (bo != null && StringUtils.hasText(bo.getBrandCode()) && StringUtils.hasText(bo.getOwnerName())) {
+                    index.computeIfAbsent(bo.getOwnerName().trim(), k -> new ArrayList<>())
+                            .add(bo.getBrandCode());
                 }
             }
         }
         return index;
     }
 
-    /** 根据 owner_name 查 brand_owner 表，返回该负责人名下的所有品牌代码列表。 */
-    private List<String> resolveOwnerBrands(String ownerName) {
-        if (!StringUtils.hasText(ownerName)) {
-            return Collections.emptyList();
-        }
-        return brandOwnerService.lambdaQuery()
-                .eq(BrandOwnerEntity::getOwnerName, ownerName.trim())
-                .list()
-                .stream()
-                .filter(bo -> StringUtils.hasText(bo.getBrandCode()))
-                .map(BrandOwnerEntity::getBrandCode)
-                .collect(Collectors.toList());
-    }
-
-    /** 校验原始密码与存储密码是否匹配，支持 BCrypt、MD5 和明文。 */
+    /** 校验原始密码与存储密码是否匹配（仅支持 BCrypt） */
     private boolean matches(String raw, String stored) {
         if (!StringUtils.hasText(stored)) {
             return false;
@@ -274,10 +261,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         if (trimmed.startsWith("$2a$") || trimmed.startsWith("$2b$") || trimmed.startsWith("$2y$")) {
             return passwordEncoder.matches(raw, trimmed);
         }
-        if (MD5_PATTERN.matcher(trimmed).matches()) {
-            return DigestUtils.md5Hex(raw).equalsIgnoreCase(trimmed);
-        }
-        return raw.equals(trimmed);
+        // 旧格式密码(MD5/明文)不再接受，引导用户通过管理员重置密码
+        LOG.warn("账号 {} 的密码不是 BCrypt 格式，拒绝登录", stored.length() > 4 ? stored.substring(0, 4) + "***" : "***");
+        return false;
     }
 
     /** 从 Authorization 头中提取 Bearer token。 */
@@ -295,5 +281,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
     @Override
     public UserEntity getByAccount(String account) {
         return lambdaQuery().eq(UserEntity::getAccount, account).one();
+    }
+
+    private Integer parseRole(String role) {
+        if (role == null) return 2;
+        String r = role.trim().toLowerCase();
+        return ("admin".equals(r) || "1".equals(r)) ? 1 : 2;
     }
 }

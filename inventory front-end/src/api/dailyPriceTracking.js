@@ -32,11 +32,9 @@ export function importLowestPrice(file) {
   return apiPost('/api/daily-price-tracking/import-lowest-price', form)
 }
 
-/** 上传 Excel 导入 */
-export function uploadDailyPriceTracking(file) {
-  const form = new FormData()
-  form.append('file', file)
-  return apiPost('/api/daily-price-tracking/upload', form)
+/** 保存跟卖价格（按 site+sku 更新 ebay_product_dedup） */
+export function saveTrackingPrice(site, sku, price) {
+  return apiPost('/api/goodcang/calc-tracking', { site, sku, trackingPrice: price })
 }
 
 /** 导出 Excel */

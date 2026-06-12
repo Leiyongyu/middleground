@@ -1,9 +1,18 @@
 package com.asinking.com.openapi.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 public class UserCreateRequest {
 
+    @NotBlank(message = "账号不能为空")
+    @Size(min = 2, max = 50, message = "账号长度2-50字符")
     private String account;
+
+    @NotBlank(message = "密码不能为空")
+    @Size(min = 6, max = 100, message = "密码长度6-100字符")
     private String password;
+
     private String role;
     private String ownerName;
 

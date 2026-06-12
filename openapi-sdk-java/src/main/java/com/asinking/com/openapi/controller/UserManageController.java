@@ -1,7 +1,9 @@
 package com.asinking.com.openapi.controller;
 
+import com.asinking.com.openapi.common.exception.BusinessException;
 import com.asinking.com.openapi.common.response.PageResult;
 import com.asinking.com.openapi.common.response.Result;
+import com.asinking.com.openapi.common.response.ResultCode;
 import com.asinking.com.openapi.dto.request.UserCreateRequest;
 import com.asinking.com.openapi.dto.request.UserUpdateRequest;
 import com.asinking.com.openapi.dto.response.UserResponse;
@@ -42,6 +44,7 @@ public class UserManageController {
      */
     @PostMapping
     public Result<UserResponse> create(@RequestBody UserCreateRequest req, HttpServletRequest request) {
+        requireAdmin(request);
         String operatorUserId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         return Result.ok(userService.createUser(operatorUserId, req.getAccount(), req.getPassword(), req.getRole(), req.getOwnerName()));
     }
@@ -51,6 +54,7 @@ public class UserManageController {
      */
     @PutMapping("/{id}")
     public Result<UserResponse> update(@PathVariable String id, @RequestBody UserUpdateRequest req, HttpServletRequest request) {
+        requireAdmin(request);
         String operatorUserId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         return Result.ok(userService.updateUser(operatorUserId, id, req.getRole(), req.getOwnerName(), req.getPassword()));
     }
@@ -60,9 +64,18 @@ public class UserManageController {
      */
     @DeleteMapping("/{id}")
     public Result<Map<String, Object>> delete(@PathVariable String id, HttpServletRequest request) {
+        requireAdmin(request);
         String operatorUserId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         boolean ok = userService.deleteUser(operatorUserId, id);
         return Result.ok(java.util.Collections.singletonMap("success", ok));
+    }
+
+    /** 校验当前用户是否为管理员，非管理员抛出 403 */
+    private void requireAdmin(HttpServletRequest request) {
+        String role = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_ROLE));
+        if (!"admin".equals(role)) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "仅管理员可操作");
+        }
     }
 
     /**

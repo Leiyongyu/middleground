@@ -23,8 +23,9 @@ public class TokenBlacklist {
     public void revoke(String jti, long expMillis) {
         if (jti == null || jti.isEmpty()) return;
         long ttlMillis = expMillis - System.currentTimeMillis();
-        if (ttlMillis <= 0) return;
-        redis.opsForValue().set(KEY_PREFIX + jti, "1", ttlMillis, TimeUnit.MILLISECONDS);
+        // 确保最小 TTL 为正数，防止 Redis SET 参数异常
+        long ttl = Math.max(1, ttlMillis);
+        redis.opsForValue().set(KEY_PREFIX + jti, "1", ttl, TimeUnit.MILLISECONDS);
     }
 
     /** 判断 JTI 是否已被撤销 */

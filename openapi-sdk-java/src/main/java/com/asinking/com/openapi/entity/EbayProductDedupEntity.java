@@ -45,6 +45,15 @@ public class EbayProductDedupEntity {
     @TableField("return_rate")
     private java.math.BigDecimal returnRate;
 
+    @TableField("lowest_price")
+    private java.math.BigDecimal lowestPrice;
+
+    @TableField("lowest_item_number")
+    private String lowestItemNumber;
+
+    @TableField("lowest_upload_time")
+    private LocalDateTime lowestUploadTime;
+
     @TableField(value = "create_time", fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

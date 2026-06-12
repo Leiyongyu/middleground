@@ -393,16 +393,29 @@ async function handleRemoveMember(memberName) {
   }
 }
 
+function generateRandomPassword(length = 8) {
+  // 排除易混淆字符 (0/O, 1/l/I)
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+  const array = new Uint8Array(length)
+  crypto.getRandomValues(array)
+  let pw = ''
+  for (let i = 0; i < length; i++) {
+    pw += chars[array[i] % chars.length]
+  }
+  return pw
+}
+
 function confirmResetPassword(row) {
+  const newPassword = generateRandomPassword()
   dialog.warning({
     title: '重置密码',
-    content: `确认将用户 ${row.account} 的密码重置为 123456 吗？`,
+    content: `确认将用户 ${row.account} 的密码重置为 ${newPassword} 吗？`,
     positiveText: '重置',
     negativeText: '取消',
     onPositiveClick: async () => {
       try {
-        await updateUser(row.id, { password: '123456' })
-        message.success('密码已重置为 123456')
+        await updateUser(row.id, { password: newPassword })
+        message.success(`密码已重置为 ${newPassword}，请告知用户及时修改`)
       } catch (error) {
         message.error(error instanceof Error ? error.message : '重置密码失败')
       }

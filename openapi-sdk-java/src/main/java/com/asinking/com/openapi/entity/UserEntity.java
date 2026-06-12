@@ -24,7 +24,7 @@ public class UserEntity {
     private String password;
 
     @TableField("role")
-    private String role;
+    private Integer role;  // 1=管理员, 2=用户
 
     @TableField("owner_name")
     private String ownerName;

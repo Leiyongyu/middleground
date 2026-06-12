@@ -21,7 +21,7 @@ public class BodyCachingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         // 仅对谷仓回调接口启用缓存（减少不必要的内存开销）
-        if (request.getRequestURI().contains("/api/goodcang/callback")) {
+        if (request.getRequestURI().startsWith("/api/goodcang/callback")) {
             ContentCachingRequestWrapper wrapper = new ContentCachingRequestWrapper(request);
             filterChain.doFilter(wrapper, response);
         } else {

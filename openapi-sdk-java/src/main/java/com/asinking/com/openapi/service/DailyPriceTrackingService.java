@@ -23,4 +23,7 @@ public interface DailyPriceTrackingService {
     void refreshTable();
 
     List<String> searchDistinctValues(String field, String keyword);
+
+    /** 带品牌权限过滤的去重值搜索 */
+    List<String> searchDistinctValuesFiltered(String field, String keyword, String userId, String role);
 }

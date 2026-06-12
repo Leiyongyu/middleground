@@ -18,11 +18,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private final FrontendAuthProperties frontendAuthProperties;
     private final ApiKeyInterceptor apiKeyInterceptor;
     private final JwtAuthInterceptor jwtAuthInterceptor;
+    private final RateLimitInterceptor rateLimitInterceptor;
+    private final com.asinking.com.openapi.security.GoodcangSignatureInterceptor goodcangSignatureInterceptor;
 
-    public WebMvcConfig(FrontendAuthProperties frontendAuthProperties, ApiKeyInterceptor apiKeyInterceptor, JwtAuthInterceptor jwtAuthInterceptor) {
+    public WebMvcConfig(FrontendAuthProperties frontendAuthProperties, ApiKeyInterceptor apiKeyInterceptor,
+                        JwtAuthInterceptor jwtAuthInterceptor, RateLimitInterceptor rateLimitInterceptor,
+                        com.asinking.com.openapi.security.GoodcangSignatureInterceptor goodcangSignatureInterceptor) {
         this.frontendAuthProperties = frontendAuthProperties;
         this.apiKeyInterceptor = apiKeyInterceptor;
         this.jwtAuthInterceptor = jwtAuthInterceptor;
+        this.rateLimitInterceptor = rateLimitInterceptor;
+        this.goodcangSignatureInterceptor = goodcangSignatureInterceptor;
     }
 
     @Override
@@ -31,7 +37,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins.toArray(new String[0]))
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("*")
+                .allowedHeaders("Content-Type", "Authorization", "X-Client-Id", "X-Api-Key")
                 .exposedHeaders("Content-Type")
                 .allowCredentials(false)
                 .maxAge(3600);
@@ -39,10 +45,18 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
+        // 限流拦截器（最高优先级）
+        registry.addInterceptor(rateLimitInterceptor)
+                .addPathPatterns("/api/**");
+        // JWT 认证拦截器
         registry.addInterceptor(jwtAuthInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns("/api/user/login", "/api/lingxing/**", "/api/goodcang/callback/**",
                         "/swagger-ui/**", "/v3/api-docs/**");
+        // 谷仓回调签名验证拦截器
+        registry.addInterceptor(goodcangSignatureInterceptor)
+                .addPathPatterns("/api/goodcang/callback/**");
+        // 领星 API Key 拦截器
         registry.addInterceptor(apiKeyInterceptor)
                 .addPathPatterns("/api/lingxing/**");
     }

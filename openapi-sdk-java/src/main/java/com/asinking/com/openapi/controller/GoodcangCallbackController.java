@@ -61,6 +61,7 @@ public class GoodcangCallbackController {
         return resp;
     }
 
+    @org.springframework.context.annotation.Profile("dev")
     @GetMapping("/test/grn-list")
     public Object testGrnList(@RequestParam(defaultValue = "2026-05-01 00:00:00") String from,
                               @RequestParam(defaultValue = "2026-05-25 23:59:59") String to) throws Exception {
@@ -68,6 +69,7 @@ public class GoodcangCallbackController {
         return resp;
     }
 
+    @org.springframework.context.annotation.Profile("dev")
     @GetMapping("/test/grn-detail")
     public Object testGrnDetail(@RequestParam String code) throws Exception {
         return client.getGrnDetail(code);

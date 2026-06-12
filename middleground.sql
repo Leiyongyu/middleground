@@ -11,7 +11,7 @@
  Target Server Version : 90700 (9.7.0)
  File Encoding         : 65001
 
- Date: 10/06/2026 21:26:21
+ Date: 12/06/2026 13:19:07
 */
 
 SET NAMES utf8mb4;
@@ -25,48 +25,21 @@ CREATE TABLE `brand_owner`  (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `brand_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '品牌代码',
   `owner_name` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '负责人姓名',
+  `user_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '用户ID(UUID)',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
   `version` int NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_brand_code`(`brand_code` ASC) USING BTREE,
-  INDEX `idx_owner_name`(`owner_name` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 34 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '品牌负责人表' ROW_FORMAT = DYNAMIC;
+  INDEX `idx_owner_name`(`owner_name` ASC) USING BTREE,
+  INDEX `idx_user_id`(`user_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 35 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '品牌负责人表' ROW_FORMAT = DYNAMIC;
 
--- ----------------------------
--- Table structure for daily_price_tracking_cache
--- ----------------------------
-DROP TABLE IF EXISTS `daily_price_tracking_cache`;
-CREATE TABLE `daily_price_tracking_cache`  (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `site` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '站点',
-  `sku` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'SKU',
-  `product_name` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '产品名称',
-  `sku_level` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT 'E' COMMENT 'SKU等级',
-  `last3_days_sales` int NULL DEFAULT 0 COMMENT '近3天销量',
-  `last7_days_sales` int NULL DEFAULT 0 COMMENT '近7天销量',
-  `last30_days_sales` int NULL DEFAULT 0 COMMENT '近30天销量',
-  `last90_days_sales` int NULL DEFAULT 0 COMMENT '近90天销量',
-  `max_monthly_sales` int NULL DEFAULT NULL COMMENT '历史最大月销',
-  `overseas_warehouse_stock` int NULL DEFAULT 0 COMMENT '海外仓库存',
-  `overseas_warehouse_age` int NULL DEFAULT NULL COMMENT '海外仓库龄',
-  `stock_sales_ratio` decimal(10, 2) NULL DEFAULT NULL COMMENT '库销比',
-  `estimated_replenish` int NULL DEFAULT NULL COMMENT '预估补货量',
-  `our_lowest_price` decimal(10, 2) NULL DEFAULT NULL COMMENT '最低价',
-  `tracking_price` decimal(10, 2) NULL DEFAULT NULL COMMENT '跟卖价格',
-  `tracking_profit_margin` decimal(10, 4) NULL DEFAULT NULL COMMENT '跟卖利润率',
-  `floor_price` decimal(10, 2) NULL DEFAULT NULL COMMENT '底线价',
-  `return_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '退货率',
-  `ebay_frontpage_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '售前链接',
-  `frontpage_sold_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '售后链接',
-  `brand` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '品牌',
-  `operator` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '操作员',
-  `remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '备注',
-  `oe_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT 'OE号',
-  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_site_sku`(`site` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '每日跟价缓存表' ROW_FORMAT = Dynamic;
+-- ====================================================================
+-- daily_price_tracking_cache 已合并到 inventory_overview，无需独立建表
+-- 迁移：INSERT INTO inventory_overview (warehouse_names, sku, ...) SELECT site, sku, ... FROM daily_price_tracking_cache;
+-- DROP TABLE IF EXISTS daily_price_tracking_cache;
+-- ====================================================================
 
 -- ----------------------------
 -- Table structure for ebay_link_template
@@ -99,9 +72,12 @@ CREATE TABLE `ebay_product_dedup`  (
   `remark` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '备注',
   `profit_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '近30天利润率',
   `return_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '退货率',
+  `lowest_price` decimal(10, 2) NULL DEFAULT NULL COMMENT '最低价(原lowest_price_record)',
+  `lowest_item_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '最低价ItemNumber(原lowest_price_record)',
+  `lowest_upload_time` datetime NULL DEFAULT NULL COMMENT '最低价上传时间(原lowest_price_record)',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_site_sku`(`site` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4913 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'ebay商品去重表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 7447 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'ebay商品主表(去重+跟价+最低价)' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for ebay_product_listing
@@ -251,7 +227,7 @@ CREATE TABLE `goodcang_product_info`  (
   `update_time` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `middle_code`(`sku_middle` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2236 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 2244 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for goodcang_warehouse
@@ -286,10 +262,10 @@ CREATE TABLE `goodcang_warehouse`  (
 DROP TABLE IF EXISTS `inventory_overview`;
 CREATE TABLE `inventory_overview`  (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `warehouse_names` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '站点',
-  `sku` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'SKU',
-  `product_name` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '产品名称',
-  `sku_level` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT 'E' COMMENT 'SKU等级',
+  `warehouse_names` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '站点',
+  `sku` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SKU',
+  `product_name` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '产品名称',
+  `sku_level` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT 'E' COMMENT 'SKU等级',
   `last30_days_profit` decimal(10, 2) NULL DEFAULT NULL COMMENT '近30利润',
   `return_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '退货率',
   `overseas_onway` int NULL DEFAULT 0 COMMENT '海外在途',
@@ -298,7 +274,7 @@ CREATE TABLE `inventory_overview`  (
   `purchase_pending_delivery` int NULL DEFAULT 0 COMMENT '采购待交付',
   `local_sellable` int NULL DEFAULT 0 COMMENT '成都可售',
   `local_onway` int NULL DEFAULT 0 COMMENT '成都在途',
-  `purchase_plan` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '0' COMMENT '采购计划',
+  `purchase_plan` int NULL DEFAULT 0 COMMENT '采购计划',
   `lock_num` int NULL DEFAULT 0 COMMENT '待出库',
   `total_inventory` int NULL DEFAULT 0 COMMENT '总库存',
   `last7_days_sales` int NULL DEFAULT 0 COMMENT '近7天销量',
@@ -308,33 +284,34 @@ CREATE TABLE `inventory_overview`  (
   `overseas_in_stock_ratio` decimal(10, 1) NULL DEFAULT NULL COMMENT '海外在库库销比',
   `overseas_total_ratio` decimal(10, 1) NULL DEFAULT NULL COMMENT '海外总库销比',
   `total_inventory_ratio` decimal(10, 1) NULL DEFAULT NULL COMMENT '总库存库销比',
-  `last_local_outbound_time` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '最近成都出库',
+  `last_local_outbound_time` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '最近成都出库',
   `outbound_days` int NULL DEFAULT NULL COMMENT '出库天数',
   `purchase_cycle` int NULL DEFAULT NULL COMMENT '采购周期',
   `purchase_quantity` decimal(10, 0) NULL DEFAULT NULL COMMENT '采购数量',
   `max_monthly_replenish` int NULL DEFAULT NULL COMMENT '最大月销补货量',
-  `owner` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '负责人',
+  `owner` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '负责人',
+  `brand` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '品牌(跟价页)',
+  `operator` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '操作员(跟价页)',
+  `oe_number` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'OE号(跟价页)',
+  `last3_days_sales` int NULL DEFAULT 0 COMMENT '近3天销量(跟价页)',
+  `overseas_warehouse_stock` int NULL DEFAULT 0 COMMENT '海外仓库存(跟价页)',
+  `overseas_warehouse_age` int NULL DEFAULT NULL COMMENT '海外仓库龄(跟价页/天)',
+  `stock_sales_ratio` decimal(10, 2) NULL DEFAULT NULL COMMENT '库销比(跟价页)',
+  `estimated_replenish` int NULL DEFAULT NULL COMMENT '预估补货量(跟价页)',
+  `our_lowest_price` decimal(10, 2) NULL DEFAULT NULL COMMENT '我们的最低价(跟价页)',
+  `ebay_frontpage_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'eBay售前链接(跟价页)',
+  `frontpage_sold_url` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'eBay售后链接(跟价页)',
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_site_sku`(`warehouse_names` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 24049 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '库存总览预计算表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 46418 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '经营数据预计算表(补货+跟价)' ROW_FORMAT = Dynamic;
 
--- ----------------------------
--- Table structure for lowest_price_record
--- ----------------------------
-DROP TABLE IF EXISTS `lowest_price_record`;
-CREATE TABLE `lowest_price_record`  (
-  `id` varchar(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-  `site` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '站点',
-  `sku` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SKU',
-  `item_number` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT 'eBay Item Number',
-  `lowest_price` decimal(10, 2) NOT NULL COMMENT '最低价格',
-  `upload_time` datetime NULL DEFAULT NULL COMMENT '最近上传时间',
-  `create_time` datetime NULL DEFAULT CURRENT_TIMESTAMP,
-  `update_time` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_site_sku`(`site` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '每日跟价最低价格记录表' ROW_FORMAT = Dynamic;
+-- ====================================================================
+-- lowest_price_record 已合并到 ebay_product_dedup，无需独立建表
+-- 迁移：UPDATE ebay_product_dedup d JOIN lowest_price_record r ON d.site=r.site AND d.sku=r.sku
+--        SET d.lowest_price=r.lowest_price, d.lowest_item_number=r.item_number, d.lowest_upload_time=r.upload_time;
+-- DROP TABLE IF EXISTS lowest_price_record;
+-- ====================================================================
 
 -- ----------------------------
 -- Table structure for operation_log
@@ -354,11 +331,12 @@ CREATE TABLE `operation_log`  (
   `fail_count` int NULL DEFAULT NULL COMMENT '失败条数',
   `error_message` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL COMMENT '错误信息',
   `create_time` datetime NULL DEFAULT CURRENT_TIMESTAMP,
+  `details` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL COMMENT '详细日志JSON',
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_api_path`(`api_path` ASC) USING BTREE,
   INDEX `idx_operator`(`operator` ASC) USING BTREE,
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 20 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '拉取数据日志表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 38 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '拉取数据日志表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for profit_report
@@ -461,7 +439,7 @@ CREATE TABLE `purchase_plan`  (
   `warehouse_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '仓库名称',
   `purchaser_id` int NULL DEFAULT 0 COMMENT '采购方id',
   `purchaser_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '采购方名称',
-  `create_time` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '创建时间',
+  `create_time` datetime NULL DEFAULT NULL COMMENT '创建时间',
   `plan_remark` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '计划备注',
   `attribute_json` json NULL COMMENT '属性',
   `file_json` json NULL COMMENT '附件',
@@ -525,7 +503,7 @@ CREATE TABLE `team`  (
   UNIQUE INDEX `uk_leader_member`(`leader` ASC, `member` ASC) USING BTREE,
   INDEX `idx_leader`(`leader` ASC) USING BTREE,
   INDEX `idx_member`(`member` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 19 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '团队关系表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 23 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '团队关系表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for user
@@ -535,7 +513,7 @@ CREATE TABLE `user`  (
   `id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT (uuid()) COMMENT '主键ID，使用UUID生成',
   `account` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '账号，唯一',
   `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '密码（加密后存储，如BCrypt、MD5等）',
-  `role` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '角色（如：admin、manager、viewer等）',
+  `role` tinyint NOT NULL DEFAULT 2 COMMENT '1=管理员,2=用户',
   `owner_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '负责人姓名',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '修改时间',
@@ -559,7 +537,7 @@ CREATE TABLE `user_column_config`  (
   `update_time` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_page`(`user_account` ASC, `page_key` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户列配置表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户列配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for warehouse
@@ -658,5 +636,46 @@ CREATE TABLE `warehouse_statement`  (
   INDEX `idx_type_opt_time`(`type` ASC, `opt_time` ASC) USING BTREE,
   INDEX `idx_sku_wid_type`(`sku` ASC, `wid` ASC, `type` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '仓库库存流水' ROW_FORMAT = DYNAMIC;
+
+-- ====================================================================
+-- 优化迁移脚本（取消注释逐条执行，每条都可独立运行）
+-- ====================================================================
+
+-- 1. purchase_plan.create_time varchar(30) → datetime
+-- ALTER TABLE `purchase_plan` MODIFY COLUMN `create_time` datetime NULL DEFAULT NULL COMMENT '创建时间';
+
+-- 2. warehouse_inventory_detail 加 (wid, sku) 复合索引
+-- ALTER TABLE `warehouse_inventory_detail` ADD INDEX `idx_wid_sku` (`wid` ASC, `sku` ASC);
+
+-- 3. brand_owner 加 user_id 列 + 索引（列不存在时才加）
+-- ALTER TABLE `brand_owner` ADD COLUMN IF NOT EXISTS `user_id` char(36) DEFAULT NULL COMMENT '用户ID(UUID)' AFTER `owner_name`;
+-- ALTER TABLE `brand_owner` ADD INDEX `idx_user_id` (`user_id` ASC);
+
+-- 4. 删除 user 表重复索引（UNIQUE INDEX account 已覆盖查询需求）
+-- ALTER TABLE `user` DROP INDEX `idx_account`;
+
+-- 5. inventory_overview 合并 daily_price_tracking_cache — 加跟价字段（逐条执行）
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `brand` varchar(100) DEFAULT '' AFTER `owner`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `operator` varchar(100) DEFAULT '' AFTER `brand`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `oe_number` varchar(100) DEFAULT '' AFTER `operator`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `last3_days_sales` int DEFAULT 0 AFTER `oe_number`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `overseas_warehouse_stock` int DEFAULT 0 AFTER `last3_days_sales`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `overseas_warehouse_age` int DEFAULT NULL AFTER `overseas_warehouse_stock`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `stock_sales_ratio` decimal(10,2) DEFAULT NULL AFTER `overseas_warehouse_age`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `estimated_replenish` int DEFAULT NULL AFTER `stock_sales_ratio`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `our_lowest_price` decimal(10,2) DEFAULT NULL AFTER `estimated_replenish`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `ebay_frontpage_url` varchar(500) DEFAULT '' AFTER `our_lowest_price`;
+-- ALTER TABLE `inventory_overview` ADD COLUMN IF NOT EXISTS `frontpage_sold_url` varchar(500) DEFAULT '' AFTER `ebay_frontpage_url`;
+-- 迁移数据（确认列加完后执行）：
+-- INSERT INTO `inventory_overview` (warehouse_names, sku, product_name, sku_level, last3_days_sales, last7_days_sales, last30_days_sales, last90_days_sales, max_monthly_sales, overseas_warehouse_stock, overseas_warehouse_age, stock_sales_ratio, estimated_replenish, our_lowest_price, return_rate, ebay_frontpage_url, frontpage_sold_url, brand, operator, oe_number) SELECT site, sku, product_name, sku_level, last3_days_sales, last7_days_sales, last30_days_sales, last90_days_sales, max_monthly_sales, overseas_warehouse_stock, overseas_warehouse_age, stock_sales_ratio, estimated_replenish, our_lowest_price, return_rate, ebay_frontpage_url, frontpage_sold_url, brand, operator, oe_number FROM `daily_price_tracking_cache` ON DUPLICATE KEY UPDATE brand=VALUES(brand), operator=VALUES(operator), oe_number=VALUES(oe_number), last3_days_sales=VALUES(last3_days_sales), overseas_warehouse_stock=VALUES(overseas_warehouse_stock), overseas_warehouse_age=VALUES(overseas_warehouse_age), stock_sales_ratio=VALUES(stock_sales_ratio), estimated_replenish=VALUES(estimated_replenish), our_lowest_price=VALUES(our_lowest_price), ebay_frontpage_url=VALUES(ebay_frontpage_url), frontpage_sold_url=VALUES(frontpage_sold_url);
+-- DROP TABLE IF EXISTS `daily_price_tracking_cache`;
+
+-- 6. ebay_product_dedup 合并 lowest_price_record — 加最低价字段（逐条执行）
+-- ALTER TABLE `ebay_product_dedup` ADD COLUMN IF NOT EXISTS `lowest_price` decimal(10,2) DEFAULT NULL AFTER `return_rate`;
+-- ALTER TABLE `ebay_product_dedup` ADD COLUMN IF NOT EXISTS `lowest_item_number` varchar(50) DEFAULT NULL AFTER `lowest_price`;
+-- ALTER TABLE `ebay_product_dedup` ADD COLUMN IF NOT EXISTS `lowest_upload_time` datetime DEFAULT NULL AFTER `lowest_item_number`;
+-- 迁移数据（确认列加完后执行）：
+-- UPDATE `ebay_product_dedup` d INNER JOIN `lowest_price_record` r ON d.site = r.site AND d.sku = r.sku SET d.lowest_price = r.lowest_price, d.lowest_item_number = r.item_number, d.lowest_upload_time = r.upload_time;
+-- DROP TABLE IF EXISTS `lowest_price_record`;
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -4,6 +4,7 @@ public enum ResultCode {
     SUCCESS(0, "ok"),
     BAD_REQUEST(400, "bad request"),
     UNAUTHORIZED(401, "unauthorized"),
+    FORBIDDEN(403, "forbidden"),
     CONFLICT(409, "conflict"),
     SERVER_ERROR(500, "server error");
 

@@ -88,7 +88,7 @@ public class LingxingPurchasePlanQueryService {
                 e.setWarehouseName(str(item.get("warehouse_name")));
                 e.setPurchaserId(intVal(item.get("purchaser_id")));
                 e.setPurchaserName(str(item.get("purchaser_name")));
-                e.setCreateTime(str(item.get("create_time")));
+                e.setCreateTime(parseDateTime(str(item.get("create_time"))));
                 e.setPlanRemark(str(item.get("plan_remark")));
                 e.setAttributeJson(toJson(item.get("attribute")));
                 e.setFileJson(toJson(item.get("file")));
@@ -134,6 +134,12 @@ public class LingxingPurchasePlanQueryService {
     private String str(Object v) { return v != null ? String.valueOf(v) : ""; }
     /** 安全转换为 int，null 或异常返回 0。 */
     private int intVal(Object v) { if (v == null) return 0; try { return Integer.parseInt(String.valueOf(v)); } catch (Exception e) { return 0; } }
+    /** 安全转换日期字符串为 LocalDateTime，解析失败返回 null */
+    private java.time.LocalDateTime parseDateTime(String s) {
+        if (s == null || s.isEmpty()) return null;
+        try { return java.time.LocalDateTime.parse(s, java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")); }
+        catch (Exception e) { return null; }
+    }
     /** 对象转 JSON 字符串，null 返回 null。 */
     private String toJson(Object v) { return v != null ? JSON.toJSONString(v) : null; }
     /** 生成 32 位 UUID（去掉横线）。 */

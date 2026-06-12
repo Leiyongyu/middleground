@@ -41,7 +41,7 @@ public class JwtTokenService {
                 .issuedAt(new Date(now))
                 .expiration(new Date(expMillis))
                 .claim("uid", user.getId())
-                .claim("role", user.getRole())
+                .claim("role", user.getRole() != null && user.getRole() == 1 ? "admin" : "user")
                 .signWith(signingKey, Jwts.SIG.HS256)
                 .compact();
 

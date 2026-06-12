@@ -7,7 +7,6 @@ import com.asinking.com.openapi.mapper.mp.ProfitReportMapper;
 import com.asinking.com.openapi.utils.ExcelUtils;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -33,7 +32,6 @@ public class ProfitReportUploadController {
      */
     @OperationLog(value = "导入", target = "利润报表导入")
     @PostMapping("/upload")
-    @Transactional
     public Result<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws Exception {
         String fileName = file.getOriginalFilename();
         Workbook wb = new XSSFWorkbook(file.getInputStream());

@@ -9,7 +9,6 @@ import com.asinking.com.openapi.service.InventoryOverviewService;
 import com.asinking.com.openapi.utils.ExcelUtils;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -34,7 +33,6 @@ public class EbaySalesController {
     /** 上传 eBay 销量 Excel 文件，解析并导入数据，按 (平台订单号+SKU) 去重更新。 */
     @OperationLog(value = "导入", target = "eBay销量导入")
     @PostMapping("/upload")
-    @Transactional
     public Result<Map<String, Object>> upload(@RequestParam("file") MultipartFile file) throws Exception {
         Workbook wb = new XSSFWorkbook(file.getInputStream());
         Sheet sheet = wb.getSheetAt(0);

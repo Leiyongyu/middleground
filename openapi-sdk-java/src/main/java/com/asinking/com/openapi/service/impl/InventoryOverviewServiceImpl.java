@@ -9,7 +9,6 @@ import com.asinking.com.openapi.mapper.mp.*;
 import com.asinking.com.openapi.service.*;
 import com.asinking.com.openapi.utils.InventoryUtils;
 import com.asinking.com.openapi.entity.EbayProductDedupEntity;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,10 +16,9 @@ import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Arrays;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 /**
@@ -31,39 +29,23 @@ import java.util.stream.Collectors;
 public class InventoryOverviewServiceImpl implements InventoryOverviewService {
 
     private static final Logger LOG = LoggerFactory.getLogger(InventoryOverviewServiceImpl.class);
+    private final InventoryComputeEngine engine;
     private final LingxingProperties properties;
     private final WarehouseService warehouseService;
     private final WarehouseInventoryDetailService inventoryService;
-    private final BrandOwnerService brandOwnerService;
-    private final UserService userService;
-    private final GoodcangGrnListMapper grnListMapper;
-    private final GoodcangGrnDetailMapper grnDetailMapper;
-    private final GoodcangWarehouseMapper gcWarehouseMapper;
-    private final PurchaseOrderMapper purchaseOrderMapper;
-    private final WarehouseStatementMapper warehouseStatementMapper;
-    private final EbaySalesMapper ebaySalesMapper;
-    private final PurchasePlanMapper purchasePlanMapper;
     private final InventoryOverviewMapper overviewMapper;
     private final EbayProductDedupService dedupService;
 
     public InventoryOverviewServiceImpl(LingxingProperties properties, WarehouseService warehouseService,
-            WarehouseInventoryDetailService inventoryService, BrandOwnerService brandOwnerService,
-            UserService userService,
-            GoodcangGrnListMapper grnListMapper,
-            GoodcangGrnDetailMapper grnDetailMapper, GoodcangWarehouseMapper gcWarehouseMapper,
-            PurchaseOrderMapper purchaseOrderMapper, WarehouseStatementMapper warehouseStatementMapper,
-            EbaySalesMapper ebaySalesMapper, PurchasePlanMapper purchasePlanMapper,
+            WarehouseInventoryDetailService inventoryService,
             InventoryOverviewMapper overviewMapper,
-            EbayProductDedupService dedupService) {
+            EbayProductDedupService dedupService,
+            InventoryComputeEngine engine) {
         this.properties = properties; this.warehouseService = warehouseService;
-        this.inventoryService = inventoryService; this.brandOwnerService = brandOwnerService;
-        this.userService = userService;
-        this.grnListMapper = grnListMapper;
-        this.grnDetailMapper = grnDetailMapper; this.gcWarehouseMapper = gcWarehouseMapper;
-        this.purchaseOrderMapper = purchaseOrderMapper; this.warehouseStatementMapper = warehouseStatementMapper;
-        this.ebaySalesMapper = ebaySalesMapper; this.purchasePlanMapper = purchasePlanMapper;
+        this.inventoryService = inventoryService;
         this.overviewMapper = overviewMapper;
         this.dedupService = dedupService;
+        this.engine = engine;
     }
 
     @Override
@@ -72,14 +54,66 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public void refreshSnapshot() {
         LOG.info("==== 运营数据重算写入数据库 开始 ====");
         long t = System.currentTimeMillis();
         try {
             List<InventoryOverviewItem> items = computeOverview();
-            overviewMapper.delete(null);
-            for (InventoryOverviewItem item : items) overviewMapper.insert(dtoToEntity(item));
-            LOG.info("==== 重算完成: {} 条 耗时{}ms ====", items.size(), System.currentTimeMillis() - t);
+            // 加载已有行（保留跟价页字段不被覆盖）
+            Map<String, InventoryOverviewEntity> existing = new LinkedHashMap<>();
+            for (InventoryOverviewEntity e : overviewMapper.selectList(null)) {
+                if (e.getWarehouseNames() != null && e.getSku() != null)
+                    existing.put(e.getWarehouseNames() + "|" + e.getSku(), e);
+            }
+            int upserted = 0;
+            Set<String> seen = new HashSet<>();
+            for (InventoryOverviewItem item : items) {
+                String key = item.getWarehouseNames() + "|" + item.getSku();
+                seen.add(key);
+                InventoryOverviewEntity entity = existing.get(key);
+                boolean isNew = (entity == null);
+                if (isNew) entity = new InventoryOverviewEntity();
+                // 写入补货页字段
+                entity.setWarehouseNames(item.getWarehouseNames());
+                entity.setSku(item.getSku());
+                entity.setProductName(item.getProductName());
+                entity.setSkuLevel(item.getSkuLevel());
+                entity.setLast30DaysProfit(item.getLast30DaysProfit());
+                entity.setReturnRate(item.getReturnRate());
+                entity.setOverseasOnway(item.getOverseasOnway());
+                entity.setOverseasSellable(item.getOverseasSellable());
+                entity.setOverseasTotal(item.getOverseasTotal());
+                entity.setPurchasePendingDelivery(item.getPurchasePendingDelivery());
+                entity.setLocalSellable(item.getLocalSellable());
+                entity.setLocalOnway(item.getLocalOnway());
+                entity.setPurchasePlan(item.getPurchasePlan());
+                entity.setLockNum(item.getLockNum());
+                entity.setTotalInventory(item.getTotalInventory());
+                entity.setLast7DaysSales(item.getLast7DaysSales());
+                entity.setLast30DaysSales(item.getLast30DaysSales());
+                entity.setLast90DaysSales(item.getLast90DaysSales());
+                entity.setMaxMonthlySales(item.getMaxMonthlySales());
+                entity.setOverseasInStockRatio(item.getOverseasInStockRatio());
+                entity.setOverseasTotalRatio(item.getOverseasTotalRatio());
+                entity.setTotalInventoryRatio(item.getTotalInventoryRatio());
+                entity.setLastLocalOutboundTime(item.getLastLocalOutboundTime());
+                entity.setOutboundDays(item.getOutboundDays());
+                entity.setPurchaseCycle(item.getPurchaseCycle());
+                entity.setPurchaseQuantity(item.getPurchaseQuantity());
+                entity.setMaxMonthlyReplenish(item.getMaxMonthlyReplenish());
+                entity.setOwner(item.getOwner());
+                if (isNew) overviewMapper.insert(entity);
+                else overviewMapper.updateById(entity);
+                upserted++;
+            }
+            // 清除旧行中不再属于补货结果的行（该行已从补货计算中消失）
+            for (Map.Entry<String, InventoryOverviewEntity> e : existing.entrySet()) {
+                if (!seen.contains(e.getKey())) {
+                    overviewMapper.deleteById(e.getValue().getId());
+                }
+            }
+            LOG.info("==== 重算完成: {} 条 (upsert) 耗时{}ms ====", upserted, System.currentTimeMillis() - t);
         } catch (Exception e) {
             LOG.error("重算失败", e);
         }
@@ -288,24 +322,18 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
     // ====================================================================
 
     private List<InventoryOverviewItem> computeOverview() {
-        List<Integer> inventoryWids = parseInventoryWids();
-
-        // ==== 仓库信息（只查一次，复用到库存、出库、站点映射）====
-        Map<Integer, WarehouseEntity> warehouseMap = warehouseService.lambdaQuery()
-                .in(WarehouseEntity::getWid, inventoryWids)
-                .ne(WarehouseEntity::getWid, 1194)
-                .list().stream()
-                .collect(Collectors.toMap(WarehouseEntity::getWid, e -> e, (a, b) -> a));
-
-        Map<Integer, String> widToSite = new HashMap<>();
-        for (Map.Entry<Integer, WarehouseEntity> e : warehouseMap.entrySet())
-            widToSite.put(e.getKey(), toWarehouseLabel(e.getValue()));
+        List<Integer> inventoryWids = engine.parseInventoryWids();
+        Map<Integer, WarehouseEntity> warehouseMap = engine.loadWarehouseMap(inventoryWids);
+        Map<Integer, String> widToSite = engine.buildWidToSite(warehouseMap);
 
         // ==== 1. 基准 (groupKey, site) from ebay_product_dedup（已去重） ====
         // 使用 extractInventoryGroupKey：去掉 PC 前缀后提取 baseSku，
         // 使 2PC-BMW-30087 和 BMW-30087 归入同一商品分组
+        // 同时收集 profitRate 和 returnRate，避免多次全表扫描
         Map<String, String> skuProductNameMap = new LinkedHashMap<>();
         Map<String, Map<String, SkuSiteInv>> siteRowsBySku = new LinkedHashMap<>();
+        java.util.Map<String, java.math.BigDecimal> prMap = new java.util.LinkedHashMap<>();
+        java.util.Map<String, java.math.BigDecimal> rrMap = new java.util.LinkedHashMap<>();
         for (EbayProductDedupEntity dedup : dedupService.listAll()) {
             String rawSku = dedup.getSku() != null ? dedup.getSku().trim() : "";
             if (rawSku.isEmpty()) continue;
@@ -317,6 +345,16 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             if (site == null || site.isEmpty()) continue;
             siteRowsBySku.computeIfAbsent(groupKey, k -> new LinkedHashMap<>())
                     .put(site, new SkuSiteInv(groupKey, site));
+            // 同时收集利润率（一次扫描完成）
+            if (dedup.getProfitRate() != null) {
+                String mid = InventoryUtils.extractMiddleCodeForInventory(rawSku);
+                if (!mid.isEmpty()) prMap.put(site + "|" + mid, dedup.getProfitRate());
+            }
+            // 同时收集退货率（一次扫描完成）
+            if (dedup.getReturnRate() != null) {
+                String mid = InventoryUtils.extractMiddleCodeForInventory(rawSku);
+                if (!mid.isEmpty()) rrMap.put(site + "|" + mid, dedup.getReturnRate());
+            }
         }
 
         // ==== 2. 库存（使用 groupKey 归并 PC/非PC）====
@@ -326,7 +364,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             if (baseSku.isEmpty()) continue;
             WarehouseEntity wh = warehouseMap.get(d.getWid());
             if (wh == null) continue;
-            String label = toWarehouseLabel(wh);
+            String label = engine.toWarehouseLabel(wh);
             if (label.isEmpty()) continue;
             // 只汇总已有 eBay 刊登的 SKU，不新建
             Map<String, SkuSiteInv> sm = siteRowsBySku.get(baseSku);
@@ -345,127 +383,21 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
             else { inv.localSellable += s; inv.localOnway += qr; }
         }
 
-        // ==== 3. 谷仓出库时间（已消除 N+1：批量查 GRN list + warehouse）====
-        List<GoodcangGrnDetailEntity> allGrnDetails = grnDetailMapper.selectList(null);
-        Set<String> allReceivingCodes = new HashSet<>();
-        for (GoodcangGrnDetailEntity d : allGrnDetails)
-            if (d.getReceivingCode() != null) allReceivingCodes.add(d.getReceivingCode());
+        // ==== 3. 谷仓出库时间 ====
+        Map<String, String> createTimeMap = engine.computeOutboundTimes();
 
-        // 批量查 grn_list，按 receiving_code 建索引
-        Map<String, GoodcangGrnListEntity> grnListByCode = new HashMap<>();
-        if (!allReceivingCodes.isEmpty())
-            for (GoodcangGrnListEntity gl : grnListMapper.selectList(
-                    new LambdaQueryWrapper<GoodcangGrnListEntity>().in(GoodcangGrnListEntity::getReceivingCode, allReceivingCodes)))
-                grnListByCode.put(gl.getReceivingCode(), gl);
+        // ==== 4. 采购周期 + 待交付 ====
+        InventoryComputeEngine.PurchaseAggregation purchaseAgg = engine.aggregatePurchases(warehouseMap);
 
-        // 批量查谷仓仓库，按 warehouse_code 建索引
-        Set<String> allWhCodes = new HashSet<>();
-        for (GoodcangGrnListEntity gl : grnListByCode.values())
-            if (gl.getWarehouseCode() != null) allWhCodes.add(gl.getWarehouseCode());
-        Map<String, GoodcangWarehouseEntity> gcWhByCode = new HashMap<>();
-        if (!allWhCodes.isEmpty())
-            for (GoodcangWarehouseEntity gw : gcWarehouseMapper.selectList(
-                    new LambdaQueryWrapper<GoodcangWarehouseEntity>().in(GoodcangWarehouseEntity::getWarehouseCode, allWhCodes)))
-                gcWhByCode.put(gw.getWarehouseCode(), gw);
-
-        Map<String, String> createTimeMap = new LinkedHashMap<>();
-        for (GoodcangGrnDetailEntity d : allGrnDetails) {
-            String mid = InventoryUtils.extractMiddleCodeForInventory(d.getProductSku());
-            if (mid.isEmpty() || d.getReceivingCode() == null) continue;
-            GoodcangGrnListEntity gl = grnListByCode.get(d.getReceivingCode());
-            if (gl == null || gl.getWarehouseCode() == null || gl.getCreateAt() == null) continue;
-            GoodcangWarehouseEntity gw = gcWhByCode.get(gl.getWarehouseCode());
-            if (gw == null || gw.getWid() == null || gw.getWid() == 0) continue;
-            String key = mid + "|" + gw.getWid(), dt = gl.getCreateAt().toLocalDate().toString();
-            String ex = createTimeMap.get(key);
-            if (ex == null || dt.compareTo(ex) > 0) createTimeMap.put(key, dt);
-        }
-
-        // ==== 4. 采购周期：purchase_order 只查一次，同时用于采购周期和待交付 ====
-        List<PurchaseOrderEntity> allPurchaseOrders = purchaseOrderMapper.selectList(null);
-        Map<String, LocalDate> orderTimeMap = new LinkedHashMap<>();
-        Map<String, Integer> purchasePendingMap = new LinkedHashMap<>();
-
-        for (PurchaseOrderEntity po : allPurchaseOrders) {
-            String sku = po.getItemSku(), whName = po.getWareHouseName();
-            if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty()) continue;
-            String site = whNameToSite(whName.trim());
-            if (site.isEmpty()) continue;
-            String key = site + "|" + InventoryUtils.extractInventoryGroupKey(sku.trim());
-
-            // 采购下单时间（取最新）
-            if (po.getOrderTime() != null) {
-                LocalDate od = po.getOrderTime().toLocalDate(), ex = orderTimeMap.get(key);
-                if (ex == null || od.isAfter(ex)) orderTimeMap.put(key, od);
-            }
-
-            // 采购待交付（待审批/待下单 的数量）
-            String statusText = po.getStatusText();
-            if ("待审批".equals(statusText) || "待下单".equals(statusText))
-                purchasePendingMap.merge(key, 1, Integer::sum);
-        }
-
-        // ==== 5. 入库时间 ====
-        Map<String, LocalDate> inboundTimeMap = new LinkedHashMap<>();
-        for (WarehouseStatementEntity ws : warehouseStatementMapper.selectList(
-                new LambdaQueryWrapper<WarehouseStatementEntity>().eq(WarehouseStatementEntity::getType, 22))) {
-            String sku = ws.getSku(), whName = ws.getWareHouseName();
-            if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty() || ws.getOptTime() == null) continue;
-            String site = whNameToSite(whName.trim());
-            if (site.isEmpty()) continue;
-            String key = site + "|" + InventoryUtils.extractInventoryGroupKey(sku.trim());
-            LocalDate od = ws.getOptTime().toLocalDate(), ex = inboundTimeMap.get(key);
-            if (ex == null || od.isBefore(ex)) inboundTimeMap.put(key, od);
-        }
-
-        // 计算采购周期天数
-        Map<String, Integer> purchaseCycleMap = new LinkedHashMap<>();
-        for (String k : orderTimeMap.keySet()) {
-            LocalDate od = orderTimeMap.get(k), ib = inboundTimeMap.get(k);
-            if (od != null && ib != null && !ib.isBefore(od))
-                purchaseCycleMap.put(k, (int) java.time.temporal.ChronoUnit.DAYS.between(od, ib));
-        }
-
-        // ==== 6. eBay 销量 ====
-        Map<String, Integer> sales7d = new LinkedHashMap<>(), sales30d = new LinkedHashMap<>(), sales90d = new LinkedHashMap<>();
-        Map<String, Map<String, Integer>> monthlySalesMap = new LinkedHashMap<>();
+        // ==== 5. eBay 销量 ====
         LocalDate today = LocalDate.now();
-        for (EbaySalesEntity s : ebaySalesMapper.selectList(null)) {
-            String sku = s.getSku(), currency = s.getCurrency();
-            if (sku == null || sku.isEmpty() || currency == null || currency.isEmpty()) continue;
-            String mid = InventoryUtils.extractMiddleCodeForInventory(sku);
-            if (mid.isEmpty()) continue;
-            String site = currencyToSite(currency.toUpperCase());
-            if (site.isEmpty()) continue;
-            LocalDate pd = s.getPaymentTime() != null ? s.getPaymentTime().toLocalDate() : null;
-            if (pd == null) continue;
-            int qty = s.getQuantity() != null ? s.getQuantity() : 0;
-            String key = site + "|" + mid;
+        InventoryComputeEngine.SalesAggregation salesAgg = engine.aggregateSales(today, true);
 
-            if (!pd.isBefore(today.minusDays(7))) sales7d.merge(key, qty, Integer::sum);
-            if (!pd.isBefore(today.minusDays(30))) sales30d.merge(key, qty, Integer::sum);
-            if (!pd.isBefore(today.minusDays(90))) sales90d.merge(key, qty, Integer::sum);
+        // ==== 6. 品牌归属 ====
+        Map<String, String> ownerByBrand = engine.loadBrandOwners();
 
-            String monthKey = pd.getYear() + "-" + String.format("%02d", pd.getMonthValue());
-            monthlySalesMap.computeIfAbsent(key, k -> new LinkedHashMap<>()).merge(monthKey, qty, Integer::sum);
-        }
-
-        // ==== 7. 品牌归属 ====
-        Map<String, String> ownerByBrand = brandOwnerService.list().stream().collect(Collectors.toMap(
-                e -> StringUtils.hasText(e.getBrandCode()) ? e.getBrandCode().trim().toUpperCase() : "",
-                e -> StringUtils.hasText(e.getOwnerName()) ? e.getOwnerName().trim() : "", (a, b) -> a));
-
-        // ==== 8. 采购计划（status_text=待审批，按站点+baseSku汇总数量）====
-        Map<String, Integer> purchasePlanCountMap = new LinkedHashMap<>();
-        for (PurchasePlanEntity pp : purchasePlanMapper.selectList(
-                new LambdaQueryWrapper<PurchasePlanEntity>().eq(PurchasePlanEntity::getStatusText, "待审批"))) {
-            String sku = pp.getSku(), whName = pp.getWarehouseName();
-            if (sku == null || sku.trim().isEmpty() || whName == null || whName.trim().isEmpty()) continue;
-            String site = whNameToSite(whName.trim());
-            if (site.isEmpty()) continue;
-            String key = site + "|" + InventoryUtils.extractInventoryGroupKey(sku.trim());
-            purchasePlanCountMap.merge(key, 1, Integer::sum);
-        }
+        // ==== 7. 采购计划（复用 purchaseAgg 中的 planCountMap）====
+        Map<String, Integer> purchasePlanCountMap = purchaseAgg.planCountMap;
 
         // ==== 9. 构建结果 ====
         List<InventoryOverviewItem> result = new ArrayList<>();
@@ -484,11 +416,11 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 item.setLockNum(inv.lockNum);
                 item.setTotalInventory(inv.overseasSellable + inv.overseasOnway + inv.localSellable + inv.localOnway);
                 String salesKey = inv.siteLabel + "|" + InventoryUtils.extractMiddleCode(baseSku);
-                item.setLast7DaysSales(sales7d.getOrDefault(salesKey, 0));
-                item.setLast30DaysSales(sales30d.getOrDefault(salesKey, 0));
-                item.setLast90DaysSales(sales90d.getOrDefault(salesKey, 0));
-                item.setMaxMonthlySales(monthlySalesMap.containsKey(salesKey)
-                        ? monthlySalesMap.get(salesKey).values().stream().max(Integer::compareTo).orElse(0)
+                item.setLast7DaysSales(salesAgg.sales7d.getOrDefault(salesKey, 0));
+                item.setLast30DaysSales(salesAgg.sales30d.getOrDefault(salesKey, 0));
+                item.setLast90DaysSales(salesAgg.sales90d.getOrDefault(salesKey, 0));
+                item.setMaxMonthlySales(salesAgg.monthlySales.containsKey(salesKey)
+                        ? salesAgg.monthlySales.get(salesKey).values().stream().max(Integer::compareTo).orElse(0)
                         : null);
 
                 String mid = InventoryUtils.extractMiddleCode(baseSku);
@@ -506,10 +438,10 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                     }
                 }
 
-                Integer pc = purchaseCycleMap.get(inv.siteLabel + "|" + baseSku);
+                Integer pc = purchaseAgg.cycleMap.get(inv.siteLabel + "|" + baseSku);
                 if (pc != null) item.setPurchaseCycle(pc);
 
-                item.setPurchasePendingDelivery(purchasePendingMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
+                item.setPurchasePendingDelivery(purchaseAgg.pendingMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
                 item.setPurchasePlan(purchasePlanCountMap.getOrDefault(inv.siteLabel + "|" + baseSku, 0));
 
                 Integer cycle = item.getPurchaseCycle(), od = item.getOutboundDays();
@@ -536,22 +468,7 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
                 result.add(item);
             }
         }
-        // 填充近30天利润率（从 ebay_product_dedup.profit_rate，按站点+中间码匹配）
-        java.util.Map<String, java.math.BigDecimal> prMap = new java.util.LinkedHashMap<>();
-        for (com.asinking.com.openapi.entity.EbayProductDedupEntity dd : dedupService.listAll()) {
-            if (dd.getSite() != null && dd.getSku() != null && dd.getProfitRate() != null) {
-                String mid = InventoryUtils.extractMiddleCodeForInventory(dd.getSku());
-                if (!mid.isEmpty()) prMap.put(dd.getSite() + "|" + mid, dd.getProfitRate());
-            }
-        }
-        // 填充退货率（从 ebay_product_dedup.return_rate，按站点+中间码匹配）
-        java.util.Map<String, java.math.BigDecimal> rrMap = new java.util.LinkedHashMap<>();
-        for (com.asinking.com.openapi.entity.EbayProductDedupEntity dd : dedupService.listAll()) {
-            if (dd.getSite() != null && dd.getSku() != null && dd.getReturnRate() != null) {
-                String mid = InventoryUtils.extractMiddleCodeForInventory(dd.getSku());
-                if (!mid.isEmpty()) rrMap.put(dd.getSite() + "|" + mid, dd.getReturnRate());
-            }
-        }
+        // 填充利润率/退货率（已在第1步中一次扫描完成，此处直接使用 prMap/rrMap）
         for (InventoryOverviewItem item : result) {
             String mid = InventoryUtils.extractMiddleCode(item.getSku());
             if (mid.isEmpty()) continue;
@@ -570,24 +487,8 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
     // 工具方法
     // ====================================================================
 
-    private Set<String> loadUserBrandCodes(String uid) {
-        UserEntity u = userService.getById(uid);
-        if (u == null || !StringUtils.hasText(u.getOwnerName())) return Collections.emptySet();
-        Set<String> s = new HashSet<>();
-        for (BrandOwnerEntity bo : brandOwnerService.lambdaQuery().eq(BrandOwnerEntity::getOwnerName, u.getOwnerName().trim()).list())
-            if (StringUtils.hasText(bo.getBrandCode())) s.add(bo.getBrandCode().trim().toUpperCase());
-        return s;
-    }
-    private boolean matchesUserBrand(String sku, Set<String> brands) {
-        if (!StringUtils.hasText(sku)) return false;
-        int i = sku.indexOf('-');
-        return brands.contains(i > 0 ? sku.substring(0, i).toUpperCase() : sku.toUpperCase());
-    }
-    private List<Integer> parseInventoryWids() {
-        String r = properties.getInventoryWids(); List<Integer> l = new ArrayList<>();
-        if (StringUtils.hasText(r)) for (String p : r.split(",")) try { l.add(Integer.parseInt(p.trim())); } catch (NumberFormatException ignored) {}
-        return l;
-    }
+    private Set<String> loadUserBrandCodes(String uid) { return engine.loadUserBrandCodes(uid); }
+    private boolean matchesUserBrand(String sku, Set<String> brands) { return engine.matchesUserBrand(sku, brands); }
     private BigDecimal divide(int n, int d) {
         return InventoryUtils.safeDivide(n, d);
     }
@@ -601,13 +502,6 @@ public class InventoryOverviewServiceImpl implements InventoryOverviewService {
         return InventoryUtils.extractBaseSku(sku);
     }
     private String mapSiteName(String n) { return InventoryUtils.mapSiteName(n); }
-
-    private String currencyToSite(String c) { return InventoryUtils.currencyToSite(c); }
-
-    private String whNameToSite(String n) {
-        return InventoryUtils.whNameToSite(n);
-    }
-    private String toWarehouseLabel(WarehouseEntity wh) { return whNameToSite(wh.getName()); }
 
     /** SKU 产品等级：委托 InventoryUtils */
     private String calcProductLevel(int sales, double profitRate) {

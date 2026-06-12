@@ -15,10 +15,16 @@ public class InventoryOverviewEntity {
     private Integer purchasePendingDelivery; private Integer localSellable; private Integer localOnway;
     private Integer purchasePlan; private Integer lockNum; private Integer totalInventory;
     private Integer last7DaysSales; private Integer last30DaysSales; private Integer last90DaysSales;
+    private Integer last3DaysSales;
     private Integer maxMonthlySales;
     private BigDecimal overseasInStockRatio; private BigDecimal overseasTotalRatio; private BigDecimal totalInventoryRatio;
     private String lastLocalOutboundTime; private Integer outboundDays; private Integer purchaseCycle;
     private BigDecimal purchaseQuantity; private Integer maxMonthlyReplenish; private String owner;
+    private String brand; private String operator; private String oeNumber;
+    private Integer overseasWarehouseStock; private Integer overseasWarehouseAge;
+    private BigDecimal stockSalesRatio; private Integer estimatedReplenish;
+    private BigDecimal ourLowestPrice;
+    private String ebayFrontpageUrl; private String frontpageSoldUrl;
     @TableField(value = "updated_at", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime updatedAt;
 }
