@@ -25,7 +25,7 @@ const authStore = useAuthStore()
 const uiStore = useUiStore()
 const { selectedPlatform } = storeToRefs(uiStore)
 
-const collapsed = ref(false)
+const collapsed = ref(true)
 const userName = computed(() => authStore.user?.ownerName || authStore.user?.name || '未设置')
 const userAccount = computed(() => authStore.user?.account || '')
 const roleLabel = computed(() => (authStore.isAdmin ? '管理员' : '用户'))
@@ -42,8 +42,10 @@ const parentKeyForRoute = computed(() => {
   const map = {
     '/dashboard': 'operations',
     '/daily-price-tracking': 'operations',
+    '/amz-replenishment': 'operations',
     '/purchases': 'purchase-group',
     '/purchase-plan/create': 'purchase-group',
+    '/amz-purchases': 'purchase-group',
     '/users': 'system',
     '/brand-owners': 'system',
     '/link-templates': 'system',
@@ -59,25 +61,32 @@ watch(parentKeyForRoute, (key) => {
   }
 })
 
-// 构建菜单项 —— 使用嵌套 children 实现父子模块
+// 构建菜单项 —— 运营和采购按平台切换，系统管理始终可见
 const menuOptions = computed(() => {
+  const isAmz = selectedPlatform.value === '亚马逊'
+  const opsChildren = isAmz
+    ? [{ label: 'Amazon 补货', key: '/amz-replenishment' }]
+    : [
+        { label: '补货', key: '/dashboard' },
+        { label: '每日跟价', key: '/daily-price-tracking' },
+      ]
+  const purchaseChildren = isAmz
+    ? [{ label: 'Amazon 采购管理', key: '/amz-purchases' }]
+    : [
+        { label: '采购管理', key: '/purchases' },
+      ]
   const base = [
     {
       label: '运营',
       key: 'operations',
       icon: renderMenuIcon('operations'),
-      children: [
-        { label: '补货', key: '/dashboard' },
-        { label: '每日跟价', key: '/daily-price-tracking' },
-      ],
+      children: opsChildren,
     },
     {
       label: '采购',
       key: 'purchase-group',
       icon: renderMenuIcon('purchase'),
-      children: [
-        { label: '采购管理', key: '/purchases' },
-      ],
+      children: purchaseChildren,
     },
   ]
   if (canManageUsers.value) {
@@ -105,6 +114,8 @@ const routeMap = {
   '/purchases': 'purchases',
   '/link-templates': 'linkTemplates',
   '/operation-logs': 'operationLogs',
+  '/amz-replenishment': 'amzReplenishment',
+  '/amz-purchases': 'amzPurchases',
 }
 
 function handleMenuUpdate(key) {
@@ -222,6 +233,15 @@ function renderMenuIcon(name) {
   return () => h(NIcon, null, { default: () => icons[name] })
 }
 
+function handlePlatformSwitch(platform) {
+  uiStore.setPlatform(platform)
+  if (platform === '亚马逊') {
+    router.push({ name: 'amzReplenishment' })
+  } else {
+    router.push({ name: 'dashboard' })
+  }
+}
+
 async function handleLogout() {
   await authStore.logout()
   await router.push('/login')
@@ -283,10 +303,11 @@ async function handleLogout() {
           <div class="platform-switch">
             <span class="platform-label">平台</span>
             <NSelect
-              v-model:value="selectedPlatform"
+              :value="selectedPlatform"
               :options="platformOptions"
               size="small"
               style="width: 110px"
+              @update:value="handlePlatformSwitch"
             />
           </div>
 
@@ -315,7 +336,7 @@ async function handleLogout() {
 
       <!-- 内容区域 -->
       <NLayoutContent
-        content-style="padding: 12px 16px; background: #f0f2f5; min-height: calc(100vh - 50px);"
+        content-style="padding: 12px 16px; background: #F6F7F9; min-height: calc(100vh - 48px);"
         class="layout-content"
       >
         <RouterView />
@@ -343,8 +364,8 @@ async function handleLogout() {
 .sider-logo {
   display: flex;
   align-items: center;
-  height: 56px;
-  padding: 0 18px;
+  height: 48px;
+  padding: 0 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
   white-space: nowrap;
@@ -355,65 +376,83 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #1677ff 0%, #722ed1 100%);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.35);
-  transition: transform 0.3s ease;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 6px;
+  background: #E8B830;
+  color: #0D1B2A;
+  font-weight: 800;
+  font-size: 16px;
+  transition: background 0.25s;
 }
 
-.logo-icon:hover {
-  transform: rotate(-10deg) scale(1.05);
-}
+.logo-icon:hover { background: #F0C840; }
 
 .logo-text {
   margin-left: 10px;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.02em;
+  font-size: 14px;
+  font-weight: 600;
+  color: #C8D6E5;
+  letter-spacing: 0.04em;
 }
 
 .logo-text-fade-enter-active,
 .logo-text-fade-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .logo-text-fade-enter-from,
 .logo-text-fade-leave-to {
   opacity: 0;
-  transform: translateX(-6px);
+  transform: translateX(-4px);
 }
 
 .sider-menu-wrap {
   flex: 1;
   overflow-y: auto;
-  padding-top: 4px;
+  padding: 8px 0;
 }
 
-/* ===== 侧边栏主题覆盖 ===== */
+/* ===== 侧边栏主题 ===== */
 :deep(.n-layout-sider) {
-  background: linear-gradient(180deg, #001529 0%, #002140 100%) !important;
+  background: #0D1B2A !important;
 }
 
 :deep(.n-menu.n-menu--inverted .n-menu-item-content) {
-  transition: all 0.2s ease;
+  transition: background 0.15s;
+  color: #8899AA;
+  font-size: 13px;
+  margin: 0 8px;
+  border-radius: 6px;
+  padding-left: 8px !important;
 }
 
 :deep(.n-menu.n-menu--inverted .n-menu-item-content:hover) {
-  background: rgba(255, 255, 255, 0.08) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #C8D6E5;
 }
 
 :deep(.n-menu.n-menu--inverted .n-menu-item-content--selected) {
-  background: rgba(22, 119, 255, 0.2) !important;
+  background: #1B3A5C !important;
+  color: #E8B830 !important;
+  font-weight: 600;
 }
 
 :deep(.n-menu.n-menu--inverted .n-menu-item-content--selected::before) {
-  background: #1677ff !important;
+  background: #E8B830 !important;
   border-radius: 0 3px 3px 0;
+  width: 3px;
+}
+
+/* 子菜单分组标题 */
+:deep(.n-menu.n-menu--inverted .n-menu-item-content--child-selected) {
+  color: #C8D6E5 !important;
+}
+
+:deep(.n-menu .n-submenu .n-menu-item-content) {
+  font-size: 13px;
+  padding-left: 8px !important;
 }
 
 /* ===== 顶部栏 ===== */
@@ -421,74 +460,50 @@ async function handleLogout() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 50px;
-  padding: 0 24px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.06);
+  height: 48px;
+  padding: 0 20px;
+  background: #fff;
+  border-bottom: 1px solid #E8ECF0;
   z-index: 20;
-  transition: box-shadow 0.3s ease;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-}
+.header-left { display: flex; align-items: center; }
 
 .breadcrumb-current {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
+  color: #1A2332;
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-}
+.header-right { display: flex; align-items: center; gap: 16px; }
 
-.platform-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+.platform-switch { display: flex; align-items: center; gap: 6px; }
 
 .platform-label {
-  color: rgba(0, 0, 0, 0.55);
-  font-size: 12px;
+  color: #8899AA;
+  font-size: 11px;
   font-weight: 500;
-  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* ===== 用户触发器 ===== */
 .user-trigger {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 4px;
-  border-radius: 20px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 16px;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.15s;
 }
-
-.user-trigger:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
+.user-trigger:hover { background: #F5F6F8; }
 
 .user-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.75);
+  font-size: 13px; font-weight: 500;
+  color: #1A2332;
   max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-.role-tag {
-  flex-shrink: 0;
-}
+.role-tag { flex-shrink: 0; }
 
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {

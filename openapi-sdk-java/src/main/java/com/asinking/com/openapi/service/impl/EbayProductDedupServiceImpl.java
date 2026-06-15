@@ -33,11 +33,11 @@ public class EbayProductDedupServiceImpl implements EbayProductDedupService {
     @Override
     @org.springframework.transaction.annotation.Transactional
     public int rebuildFromListing() {
-        LOG.info("==== 去重表重建 开始 ====");
+        LOG.info("==== 去重表重建(upsert) 开始 ====");
         long t = System.currentTimeMillis();
 
-        // 1. 读 ebay_product_listing 全量，按 (sku, 归一化site) 去重，取第一个的 product_name
-        Map<String, EbayProductListingEntity> deduped = new LinkedHashMap<>();
+        // 1. 读 ebay_product_listing，按 (site, sku) 去重
+        Map<String, EbayProductListingEntity> listingMap = new LinkedHashMap<>();
         for (EbayProductListingEntity pl : listingService.list()) {
             String sku = pl.getSku();
             if (sku == null || sku.trim().isEmpty()) continue;
@@ -45,11 +45,10 @@ public class EbayProductDedupServiceImpl implements EbayProductDedupService {
             String site = InventoryUtils.mapSiteName(
                     pl.getSiteName() != null ? pl.getSiteName().trim() : "");
             if (site.isEmpty()) continue;
-            String key = site + "|" + sku;
-            deduped.putIfAbsent(key, pl);
+            listingMap.putIfAbsent(site + "|" + sku, pl);
         }
 
-        // 2. 加载已有去重记录（保留所有用户维护字段）
+        // 2. 加载已有去重记录
         Map<String, EbayProductDedupEntity> existingMap = new LinkedHashMap<>();
         for (EbayProductDedupEntity e : mapper.selectList(null)) {
             if (StringUtils.hasText(e.getSite()) && StringUtils.hasText(e.getSku())) {
@@ -57,47 +56,43 @@ public class EbayProductDedupServiceImpl implements EbayProductDedupService {
             }
         }
 
-        // 3. 删除旧记录，批量插入新记录（保留用户维护的字段）
-        mapper.delete(new LambdaQueryWrapper<>());
-        int count = 0;
-        List<EbayProductDedupEntity> batch = new ArrayList<>();
-        for (Map.Entry<String, EbayProductListingEntity> entry : deduped.entrySet()) {
+        // 3. Upsert：listing有则更新产品名(保留用户字段)，新则插入；已有但listing无的保留不动
+        int inserted = 0, updated = 0;
+        List<EbayProductDedupEntity> insertBatch = new ArrayList<>();
+        for (Map.Entry<String, EbayProductListingEntity> entry : listingMap.entrySet()) {
             String key = entry.getKey();
             String[] parts = key.split("\\|", 2);
-            EbayProductDedupEntity entity = new EbayProductDedupEntity();
-            entity.setSite(parts[0]);
-            entity.setSku(parts[1]);
-            // 产品名称：取第一个 listing 的 local_name
             EbayProductListingEntity pl = entry.getValue();
-            entity.setProductName(pl.getLocalName() != null ? pl.getLocalName().trim() : "");
-            // 从旧记录恢复所有用户维护的字段
-            EbayProductDedupEntity old = existingMap.get(key);
-            if (old != null) {
-                entity.setOeNumber(StringUtils.hasText(old.getOeNumber()) ? old.getOeNumber() : "");
-                entity.setRemark(old.getRemark());
-                entity.setTrackingPrice(old.getTrackingPrice());
-                entity.setTrackingProfitMargin(old.getTrackingProfitMargin());
-                entity.setFloorPrice(old.getFloorPrice());
-                entity.setLowestPrice(old.getLowestPrice());
-                entity.setLowestItemNumber(old.getLowestItemNumber());
-                entity.setLowestUploadTime(old.getLowestUploadTime());
-                entity.setProfitRate(old.getProfitRate());
-                entity.setReturnRate(old.getReturnRate());
-            }
-            batch.add(entity);
-            count++;
+            EbayProductDedupEntity exist = existingMap.get(key);
 
-            if (batch.size() >= 1000) {
-                for (EbayProductDedupEntity e : batch) mapper.insert(e);
-                batch.clear();
+            if (exist != null) {
+                // 已存在：只更新产品名称，用户维护字段不动
+                String newName = pl.getLocalName() != null ? pl.getLocalName().trim() : "";
+                if (!newName.isEmpty() && !newName.equals(exist.getProductName())) {
+                    exist.setProductName(newName);
+                    mapper.updateById(exist);
+                    updated++;
+                }
+            } else {
+                // 新记录：插入
+                EbayProductDedupEntity entity = new EbayProductDedupEntity();
+                entity.setSite(parts[0]);
+                entity.setSku(parts[1]);
+                entity.setProductName(pl.getLocalName() != null ? pl.getLocalName().trim() : "");
+                insertBatch.add(entity);
+                if (insertBatch.size() >= 1000) {
+                    for (EbayProductDedupEntity e : insertBatch) mapper.insert(e);
+                    inserted += insertBatch.size(); insertBatch.clear();
+                }
             }
         }
-        if (!batch.isEmpty()) {
-            for (EbayProductDedupEntity e : batch) mapper.insert(e);
+        if (!insertBatch.isEmpty()) {
+            for (EbayProductDedupEntity e : insertBatch) mapper.insert(e);
+            inserted += insertBatch.size();
         }
 
-        LOG.info("==== 去重表重建 完成: {} 条 耗时{}ms ====", count, System.currentTimeMillis() - t);
-        return count;
+        LOG.info("==== 去重表重建(upsert) 完成: 新增{} 更新{} 耗时{}ms ====", inserted, updated, System.currentTimeMillis() - t);
+        return inserted + updated;
     }
 
     @Override

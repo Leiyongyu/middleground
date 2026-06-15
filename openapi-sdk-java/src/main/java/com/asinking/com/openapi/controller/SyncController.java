@@ -11,6 +11,7 @@ import com.asinking.com.openapi.service.LingxingPurchaseOrderService;
 import com.asinking.com.openapi.service.LingxingWarehouseStatementService;
 import com.asinking.com.openapi.service.LingxingPurchasePlanQueryService;
 import com.asinking.com.openapi.service.LingxingEbayService;
+import com.asinking.com.openapi.service.LingxingShopService;
 import com.asinking.com.openapi.service.GoodcangProductService;
 import com.asinking.com.openapi.service.GoodcangSyncService;
 import com.asinking.com.openapi.service.InventoryOverviewService;
@@ -48,6 +49,7 @@ public class SyncController {
     private final LingxingEbayService ebayService;
     private final GoodcangSyncService goodcangSyncService;
     private final GoodcangProductService goodcangProductService;
+    private final LingxingShopService ebayShopService;
     private final InventoryOverviewService overviewService;
     private final com.asinking.com.openapi.service.DailyPriceTrackingService trackingService;
     private final OperationLogService logService;
@@ -63,7 +65,7 @@ public class SyncController {
                           LingxingEbayService ebayService,
                           GoodcangSyncService goodcangSyncService,
                           GoodcangProductService goodcangProductService,
-                          InventoryOverviewService overviewService,
+                          LingxingShopService ebayShopService,                          InventoryOverviewService overviewService,
                           com.asinking.com.openapi.service.DailyPriceTrackingService trackingService,
                           OperationLogService logService,
                           JwtTokenService jwtTokenService,
@@ -77,7 +79,7 @@ public class SyncController {
         this.ebayService = ebayService;
         this.goodcangSyncService = goodcangSyncService;
         this.goodcangProductService = goodcangProductService;
-        this.overviewService = overviewService;
+        this.ebayShopService = ebayShopService;        this.overviewService = overviewService;
         this.trackingService = trackingService;
         this.logService = logService;
         this.jwtTokenService = jwtTokenService;
@@ -156,6 +158,16 @@ public class SyncController {
                 long t = System.currentTimeMillis();
                 var r = purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString());
                 return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("goodcangGrnDetail", "谷仓-入库单详情", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = goodcangSyncService.syncAllGrnDetails();
+                return map("inserted", r.getInserted(), "elapsed", ms(t));
+            }, result),
+            runAsync("ebayShops", "领星-eBay店铺", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = ebayShopService.getActiveEbayShops(0, 1000);
+                return map("total", r.getTotal(), "elapsed", ms(t));
             }, result)
         );
         all.join(); // 等待全部完成

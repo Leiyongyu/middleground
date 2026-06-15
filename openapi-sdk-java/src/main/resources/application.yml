@@ -37,10 +37,10 @@ frontend-auth:
   client-id: ${FRONTEND_CLIENT_ID:JMH_WEB_ADMIN}
   api-key: ${FRONTEND_API_KEY:61f3974092af446da7b51be512842959}
   allowed-origins:
-    - "http://localhost:3000"
-    - "http://localhost:5173"
     - "http://127.0.0.1:3000"
     - "http://127.0.0.1:5173"
+    - "http://127.0.0.1:80"
+    - "http://192.168.110.99"
 
 goodcang:
   app-token: ${GOODCANG_APP_TOKEN:a1bc2f4455c6ccb0e9a67b2ce984a3c5}

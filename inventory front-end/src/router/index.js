@@ -67,6 +67,18 @@ const router = createRouter({
           component: () => import('@/views/OperationLogView.vue'),
           meta: { requiresAdmin: true, title: '操作日志' },
         },
+        {
+          path: 'amz-replenishment',
+          name: 'amzReplenishment',
+          component: () => import('@/views/AmzReplenishmentView.vue'),
+          meta: { title: 'Amazon 补货' },
+        },
+        {
+          path: 'amz-purchases',
+          name: 'amzPurchases',
+          component: () => import('@/views/AmzPurchaseView.vue'),
+          meta: { title: 'Amazon 采购管理' },
+        },
       ],
     },
   ],

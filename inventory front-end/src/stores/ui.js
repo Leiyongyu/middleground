@@ -2,11 +2,16 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
 export const useUiStore = defineStore('ui', () => {
-  const platformOptions = ['亚马逊', 'eBay']
+  const platformOptions = ['eBay', '亚马逊']
   const selectedPlatform = ref('eBay')
+
+  function setPlatform(platform) {
+    selectedPlatform.value = platform
+  }
 
   return {
     platformOptions,
     selectedPlatform,
+    setPlatform,
   }
 })

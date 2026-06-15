@@ -762,17 +762,25 @@ async function handleExportExcel() {
 }
 
 :deep(.n-data-table-th) {
-  background: #fafafa;
+  background: #F8F9FA;
   font-weight: 600;
-  font-size: 12px;
-  color: rgba(0, 0, 0, 0.55);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5A6A7E;
   text-align: center !important;
+  border-bottom: 2px solid #E8ECF0 !important;
 }
 
 :deep(.n-data-table-td) {
   font-size: 13px;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid #F0F2F5;
+  color: #2D3A4A;
   text-align: center !important;
+}
+
+:deep(.n-data-table-tr--striped) {
+  background: #FAFBFC;
 }
 
 @media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
@@ -849,10 +857,10 @@ async function handleExportExcel() {
   border: 1px solid #d9d9d9; border-radius: 4px;
   font-size: 13px; outline: none;
 }
-.filter-raw-input:focus { border-color: #1677ff; box-shadow: 0 0 0 2px rgba(22,119,255,0.1); }
+.filter-raw-input:focus { border-color: #1B3A5C; box-shadow: 0 0 0 2px rgba(27,58,92,0.1); }
 .filter-num-row { display: flex; align-items: center; gap: 8px; }
-.filter-op-select { height: 30px; width: 60px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; text-align: center; cursor: pointer; outline: none; padding-left: 2px; padding-right: 0; }
-.filter-op-select:focus { border-color: #1677ff; }
+.filter-op-select { height: 30px; width: 60px; border: 1px solid #D0D5DD; border-radius: 4px; font-size: 14px; text-align: center; cursor: pointer; outline: none; padding-left: 2px; padding-right: 0; }
+.filter-op-select:focus { border-color: #1B3A5C; }
 .filter-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 0 8px; flex-shrink: 0; }
 .filter-distinct-list {
   max-height: 180px;
