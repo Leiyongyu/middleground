@@ -60,18 +60,17 @@ public class LingxingWarehouseService {
     /** 同步本地仓和海外仓数据，增量 upsert 到 warehouse 表。 */
     @Transactional
     public WarehouseSyncResponse syncOverseaWarehouses(WarehouseSyncRequest req) throws Exception {
-        // 拉取 type=1（本地仓）和 type=3（海外仓），合并后写入
-        Object remoteType1 = callWarehouseApi(1, req);
-        SyncStats stats1 = upsertWarehouses(remoteType1);
-
-        Object remoteType3 = callWarehouseApi(3, req);
-        SyncStats stats3 = upsertWarehouses(remoteType3);
-
-        int inserted = stats1.inserted + stats3.inserted;
-        int updated = stats1.updated + stats3.updated;
-        int total = stats1.total + stats3.total;
-        // 返回 type=3 的数据供前端展示，type=1 的数据在 remoteType1 里
-        return new WarehouseSyncResponse(inserted, updated, total, remoteType3);
+        // 拉取 type=1(本地仓)/3(海外仓)/4(亚马逊平台仓)/6(AWD仓)，合并后写入
+        int[] types = {1, 3, 4, 6};
+        int inserted = 0, updated = 0, total = 0;
+        Object lastRemote = null;
+        for (int t : types) {
+            Object remote = callWarehouseApi(t, req);
+            SyncStats stats = upsertWarehouses(remote);
+            inserted += stats.inserted; updated += stats.updated; total += stats.total;
+            if (t == 3) lastRemote = remote;
+        }
+        return new WarehouseSyncResponse(inserted, updated, total, lastRemote);
     }
 
     /** 调用领星仓库列表 API。 */
@@ -196,8 +195,8 @@ public class LingxingWarehouseService {
 
             Integer type = getIntObj(row, "type");
             Integer isDelete = getIntObj(row, "is_delete", "isDelete");
-            // 存储 type=1（本地仓）和 type=3（海外仓），过滤其他类型和已删除
-            if (type != null && type != 1 && type != 3) {
+            // 过滤已删除的仓库
+            if (isDelete != null && isDelete != 0) {
                 continue;
             }
             if (isDelete != null && isDelete != 0) {

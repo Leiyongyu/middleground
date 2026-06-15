@@ -52,9 +52,9 @@ public class LingxingShopService {
     }
 
     /** 分页拉取启用的 eBay 店铺并增量 upsert 到数据库。 */
-    // platform_code=10003 是 eBay，status=1 启用中，is_sync=1 已同步
+    // platform_code: 10001=Amazon, 10003=eBay
     @Transactional
-    public EbayShopSyncResult getActiveEbayShops(int offset, int length) throws Exception {
+    public EbayShopSyncResult getActiveShops(int platformCode, int offset, int length) throws Exception {
         String accessToken = authService.getAccessToken();
 
         Map<String, Object> queryParams = new LinkedHashMap<>();
@@ -62,7 +62,7 @@ public class LingxingShopService {
         queryParams.put("access_token", accessToken);
         queryParams.put("app_key", properties.getAppId());
 
-        List<Integer> platformCodes = Arrays.asList(10003);
+        List<Integer> platformCodes = Arrays.asList(platformCode);
         Map<String, Object> body = new LinkedHashMap<>();
         // 列表字段签名时传 JSON 字符串，签名后替换回数组，否则领星返回 sign not correct
         body.put("platform_code", JSON.toJSONString(platformCodes));
@@ -220,6 +220,24 @@ public class LingxingShopService {
     /** 生成 32 位 UUID（去掉横线）。 */
     private String uuid32() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    public List<String> getStoreIdsByPlatform(int platformCode) {
+        return ebayShopListService.lambdaQuery()
+                .eq(EbayShopListEntity::getPlatformCode, String.valueOf(platformCode))
+                .list().stream()
+                .map(EbayShopListEntity::getStoreId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toList());
+    }
+
+    public List<String> getSidsByPlatform(int platformCode) {
+        return ebayShopListService.lambdaQuery()
+                .eq(EbayShopListEntity::getPlatformCode, String.valueOf(platformCode))
+                .list().stream()
+                .map(EbayShopListEntity::getSid)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toList());
     }
 
     private static final class SyncStats {

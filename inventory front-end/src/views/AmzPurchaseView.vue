@@ -7,12 +7,7 @@ import {
 
 const message = useMessage()
 
-// ===== 死数据 =====
-const dummyData = [
-  { sku: 'B0-ABC-12345', productName: 'BMW 机油滤清器', site: '美国', warehouse: 'CTUAMZ-US', planQty: 300, fbaStock: 120, salesForecast: 280, purchaseCycle: 15, supplier: '供应商A', status: '待审批', creator: '张三', submitTime: '2026-06-10', remark: '' },
-  { sku: 'B0-DEF-67890', productName: 'LR 空气滤芯', site: '德国', warehouse: 'CTUAMZ-DE', planQty: 500, fbaStock: 280, salesForecast: 450, purchaseCycle: 20, supplier: '供应商B', status: '已审批', creator: '李四', submitTime: '2026-06-09', remark: '紧急' },
-  { sku: 'B0-GHI-11111', productName: 'FORD 刹车片', site: '英国', warehouse: 'CTUAMZ-UK', planQty: 150, fbaStock: 45, salesForecast: 130, purchaseCycle: 10, supplier: '供应商C', status: '已驳回', creator: '王五', submitTime: '2026-06-08', remark: '库存充足' },
-]
+
 
 const loading = ref(false)
 const rows = ref(dummyData)

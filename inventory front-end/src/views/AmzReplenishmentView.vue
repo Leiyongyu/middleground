@@ -1,23 +1,43 @@
 <script setup>
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
 import {
   NButton, NCard, NCheckbox, NDataTable, NDrawer, NDrawerContent,
   NDropdown, NInput, NPopover, NSpace, NTag, useMessage,
 } from 'naive-ui'
+import { fetchAmzInventory } from '@/api/amzInventory'
+import { apiPost } from '@/api/request'
 
 const message = useMessage()
 
-// ===== 死数据 =====
-const dummyData = [
-  { sellerSku: 'B0-ABC-12345', whSku: 'ABC-12345', rating: 4.5, reviews: 328, adRate: 12.5, profitRate30: 18.2, refundRate90: 3.1, category: '汽车配件', purchased: 200, domesticStock: 50, lockNum: 10, fbStock: 120, fbaOnway: 80, totalStock: 260, sales7: 35, sales14: 62, sales30: 140, sales60: 280, speed14: 4.4, speed30: 4.7, speed60: 4.7, safetyStock: 60, avgMonthly: 145, replenishQty: 85, shipment: 100 },
-  { sellerSku: 'B0-DEF-67890', whSku: 'DEF-67890', rating: 4.2, reviews: 156, adRate: 8.3, profitRate30: 22.5, refundRate90: 2.4, category: '摩托车配件', purchased: 500, domesticStock: 120, lockNum: 25, fbStock: 280, fbaOnway: 150, totalStock: 575, sales7: 80, sales14: 155, sales30: 320, sales60: 650, speed14: 11.1, speed30: 10.7, speed60: 10.8, safetyStock: 130, avgMonthly: 330, replenishQty: 0, shipment: 200 },
-  { sellerSku: 'B0-GHI-11111', whSku: 'GHI-11111', rating: 3.9, reviews: 89, adRate: 15.0, profitRate30: 10.8, refundRate90: 5.7, category: '卡车配件', purchased: 80, domesticStock: 30, lockNum: 5, fbStock: 45, fbaOnway: 20, totalStock: 100, sales7: 12, sales14: 28, sales30: 55, sales60: 110, speed14: 2.0, speed30: 1.8, speed60: 1.8, safetyStock: 25, avgMonthly: 58, replenishQty: 40, shipment: 50 },
-]
-
 const loading = ref(false)
-const rows = ref(dummyData)
-const totalRecords = ref(dummyData.length)
+const rows = ref([])
+const totalRecords = ref(0)
 const searchKeyword = ref('')
+const currentPage = ref(1)
+const pageSize = ref(100)
+
+const pagination = computed(() => ({
+  page: currentPage.value,
+  pageSize: pageSize.value,
+  itemCount: totalRecords.value,
+  showSizePicker: true,
+  pageSizes: [20, 50, 100, 200],
+  onUpdatePage: (p) => { currentPage.value = p; loadData() },
+  onUpdatePageSize: (s) => { pageSize.value = s; currentPage.value = 1; loadData() },
+}))
+
+async function loadData() {
+  loading.value = true
+  try {
+    const res = await fetchAmzInventory({ page: currentPage.value, size: pageSize.value })
+    rows.value = res?.records || []
+    totalRecords.value = res?.total || 0
+  } catch (e) {
+    message.error('加载Amazon补货数据失败')
+  } finally { loading.value = false }
+}
+
+onMounted(() => loadData())
 
 // ===== 列排序 =====
 const sortField = ref('')
@@ -94,7 +114,7 @@ const filteredRows = computed(() => {
   let result = rows.value
   if (searchKeyword.value.trim()) {
     const kw = searchKeyword.value.trim().toLowerCase()
-    result = result.filter(r => r.sellerSku.toLowerCase().includes(kw) || r.whSku.toLowerCase().includes(kw))
+    result = result.filter(r => r.sellerSku.toLowerCase().includes(kw) || r.warehouseSku.toLowerCase().includes(kw))
   }
   if (sortField.value) {
     const f = sortField.value; const asc = sortOrder.value === 'asc'
@@ -126,9 +146,23 @@ function renderSortIcon(key) {
 // ===== 列定义 =====
 const columns = [
   { type: 'selection', multiple: true, width: 40, fixed: 'left' },
-  { title: 'Seller SKU', key: 'sellerSku', width: 150, fixed: 'left', ellipsis: { tooltip: true } },
-  { title: '仓库SKU', key: 'whSku', width: 130, ellipsis: { tooltip: true } },
-  { title: '评分', key: 'rating', width: 70 },
+  { title: 'MSKU', key: 'sellerSku', width: 150, fixed: 'left', ellipsis: { tooltip: true } },
+  { title: '仓库SKU', key: 'warehouseSku', width: 130, ellipsis: { tooltip: true } },
+  { title: '店铺', key: 'store', width: 160, fixed: 'left' },
+  { title: '评分', key: 'rating', width: 165, render: (row) => {
+      const r = row.rating != null && !isNaN(Number(row.rating)) ? Number(row.rating) : 0
+      if (r > 5) return ''
+      const full = Math.floor(r)
+      const starPath = 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'
+      const children = []
+      for (let i = 0; i < 5; i++) {
+        children.push(h('svg', { viewBox: '0 0 24 24', width: '13', height: '13',
+          style: { color: i < full ? '#f5a623' : '#e0e0e0', marginRight: '1px', flexShrink: 0, verticalAlign: 'middle' }
+        }, [h('path', { fill: 'currentColor', d: starPath })]))
+      }
+      children.push(h('span', { style: { fontSize: '12px', color: '#999', marginLeft: '4px' } }, String(r)))
+      return h('span', { style: { display: 'inline-flex', alignItems: 'center' } }, children)
+    } },
   { title: '评论数', key: 'reviews', width: 80 },
   { title: '广告费率', key: 'adRate', width: 100, render: (row) => row.adRate != null ? row.adRate + '%' : '' },
   { title: '近30天利润率', key: 'profitRate30', width: 130, render: (row) => row.profitRate30 != null ? row.profitRate30 + '%' : '' },
@@ -181,7 +215,7 @@ const leftCols = computed(() =>
 )
 const isAllChecked = computed(() => leftCols.value.every(c => c.checked))
 function toggleAll() {
-  if (isAllChecked.value) visibleKeys.value = ['sellerSku', 'whSku']
+  if (isAllChecked.value) visibleKeys.value = ['sellerSku', 'warehouseSku', 'store']
   else visibleKeys.value = columns.filter(c => c.key).map(c => c.key)
 }
 function toggleColumn(key) {
@@ -193,7 +227,16 @@ onMounted(() => document.addEventListener('click', onDocClick))
 onUnmounted(() => document.removeEventListener('click', onDocClick))
 function onDocClick() { if (showFilter.value) showFilter.value = false }
 
-function handleRefresh() { loading.value = true; setTimeout(() => loading.value = false, 500) }
+async function handleRefresh() {
+  loading.value = true
+  try {
+    await apiPost('/api/amz/inventory/refresh')
+    await loadData()
+    message.success('刷新完成')
+  } catch (e) {
+    message.error('刷新失败')
+  } finally { loading.value = false }
+}
 const checkedRowKeys = ref([])
 </script>
 
@@ -223,15 +266,16 @@ const checkedRowKeys = ref([])
         </template>
 
         <NDataTable
+          v-if="totalRecords > 0"
           :loading="loading"
           :columns="visibleColumns"
           :data="filteredRows"
           :bordered="false"
           :scroll-x="visibleScrollX"
           :max-height="680"
-          :row-key="(row) => `${row.sellerSku || ''}|${row.whSku || ''}`"
+          :row-key="(row) => `${row.sellerSku || ''}|${row.warehouseSku || ''}`"
           v-model:checked-row-keys="checkedRowKeys"
-          :pagination="{ pageSize: 100, pageSizes: [20, 50, 100, 200] }"
+          :pagination="pagination"
           striped
         />
       </NCard>

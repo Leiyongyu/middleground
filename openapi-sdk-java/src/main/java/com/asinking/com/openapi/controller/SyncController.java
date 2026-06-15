@@ -10,6 +10,9 @@ import com.asinking.com.openapi.service.LingxingWarehouseService;
 import com.asinking.com.openapi.service.LingxingPurchaseOrderService;
 import com.asinking.com.openapi.service.LingxingWarehouseStatementService;
 import com.asinking.com.openapi.service.LingxingPurchasePlanQueryService;
+import com.asinking.com.openapi.service.AmzOrderProfitService;
+import com.asinking.com.openapi.service.AmzProductPerformanceService;
+import com.asinking.com.openapi.service.LingxingAmazonService;
 import com.asinking.com.openapi.service.LingxingEbayService;
 import com.asinking.com.openapi.service.LingxingShopService;
 import com.asinking.com.openapi.service.GoodcangProductService;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,6 +53,9 @@ public class SyncController {
     private final LingxingEbayService ebayService;
     private final GoodcangSyncService goodcangSyncService;
     private final GoodcangProductService goodcangProductService;
+    private final LingxingAmazonService amazonService;
+    private final AmzProductPerformanceService amzPerfService;
+    private final AmzOrderProfitService amzProfitService;
     private final LingxingShopService ebayShopService;
     private final InventoryOverviewService overviewService;
     private final com.asinking.com.openapi.service.DailyPriceTrackingService trackingService;
@@ -63,6 +70,9 @@ public class SyncController {
                           LingxingPurchaseOrderService purchaseOrderService,
                           LingxingPurchasePlanQueryService purchasePlanQueryService,
                           LingxingEbayService ebayService,
+                          LingxingAmazonService amazonService,
+                          AmzProductPerformanceService amzPerfService,
+                          AmzOrderProfitService amzProfitService,
                           GoodcangSyncService goodcangSyncService,
                           GoodcangProductService goodcangProductService,
                           LingxingShopService ebayShopService,                          InventoryOverviewService overviewService,
@@ -77,6 +87,9 @@ public class SyncController {
         this.purchaseOrderService = purchaseOrderService;
         this.purchasePlanQueryService = purchasePlanQueryService;
         this.ebayService = ebayService;
+        this.amazonService = amazonService;
+        this.amzPerfService = amzPerfService;
+        this.amzProfitService = amzProfitService;
         this.goodcangSyncService = goodcangSyncService;
         this.goodcangProductService = goodcangProductService;
         this.ebayShopService = ebayShopService;        this.overviewService = overviewService;
@@ -111,16 +124,33 @@ public class SyncController {
         String operator = getCurrentUser();
         String ip = getClientIp();
 
-        // 所有外部接口并行调用
-        CompletableFuture<Void> all = CompletableFuture.allOf(
+        // Phase 1: 仓库+店铺（必须先完成，后续依赖）
+        CompletableFuture<Void> phase1 = CompletableFuture.allOf(
             runAsync("warehouse", "领星-仓库信息", apiPath, operator, ip, () -> {
                 long t = System.currentTimeMillis();
                 WarehouseSyncResponse r = warehouseService.syncOverseaWarehouses(new WarehouseSyncRequest());
                 return map("inserted", r.getInserted(), "updated", r.getUpdated(), "elapsed", ms(t));
             }, result),
+            runAsync("ebayShops", "领星-eBay店铺", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = ebayShopService.getActiveShops(10003, 0, 1000);
+                return map("total", r.getTotal(), "elapsed", ms(t));
+            }, result),
+            runAsync("amzShops", "领星-亚马逊店铺", apiPath, operator, ip, () -> {
+                long t = System.currentTimeMillis();
+                var r = ebayShopService.getActiveShops(10001, 0, 1000);
+                return map("total", r.getTotal(), "elapsed", ms(t));
+            }, result)
+        );
+        phase1.join();
+
+        // Phase 2: Listing+库存+采购（依赖Phase1的店铺/仓库数据）
+        CompletableFuture<Void> phase2 = CompletableFuture.allOf(
             runAsync("ebayItems", "领星-eBay商品刊登", apiPath, operator, ip, () -> {
                 long t = System.currentTimeMillis();
-                var r = ebayService.syncAllEbayItems(null);
+                var req = new com.asinking.com.openapi.service.model.EbayListRequest();
+                req.setStoreIds(ebayShopService.getStoreIdsByPlatform(10003));
+                var r = ebayService.syncAllEbayItems(req);
                 return map("total", r.getRemoteTotal(), "elapsed", ms(t));
             }, result),
             runAsync("inventory", "领星-库存明细", apiPath, operator, ip, () -> {
@@ -133,11 +163,12 @@ public class SyncController {
                 var r = goodcangSyncService.syncWarehouses();
                 return map("inserted", r.getInserted(), "elapsed", ms(t));
             }, result),
-            runAsync("goodcangGrn", "谷仓-入库单", apiPath, operator, ip, () -> {
-                long t = System.currentTimeMillis();
+            runAsync("goodcangGrn", "谷仓-入库单及详情", apiPath, operator, ip, () -> {
+                long t1 = System.currentTimeMillis();
                 String to = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                var r = goodcangSyncService.syncGrn("2026-01-01 00:00:00", to);
-                return map("inserted", r.getInserted(), "elapsed", ms(t));
+                var r1 = goodcangSyncService.syncGrn("2026-01-01 00:00:00", to);
+                var r2 = goodcangSyncService.syncAllGrnDetails();
+                return map("inserted", r1.getInserted() + r2.getInserted(), "elapsed", ms(t1));
             }, result),
             runAsync("statement", "领星-库存流水", apiPath, operator, ip, () -> {
                 long t = System.currentTimeMillis();
@@ -159,18 +190,14 @@ public class SyncController {
                 var r = purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString());
                 return map("inserted", r.getInserted(), "elapsed", ms(t));
             }, result),
-            runAsync("goodcangGrnDetail", "谷仓-入库单详情", apiPath, operator, ip, () -> {
+            runAsync("amzItems", "领星-Amazon商品刊登", apiPath, operator, ip, () -> {
                 long t = System.currentTimeMillis();
-                var r = goodcangSyncService.syncAllGrnDetails();
-                return map("inserted", r.getInserted(), "elapsed", ms(t));
-            }, result),
-            runAsync("ebayShops", "领星-eBay店铺", apiPath, operator, ip, () -> {
-                long t = System.currentTimeMillis();
-                var r = ebayShopService.getActiveEbayShops(0, 1000);
-                return map("total", r.getTotal(), "elapsed", ms(t));
+                List<String> amzSids = ebayShopService.getSidsByPlatform(10001);
+                int n = amazonService.syncAllAmzListings(amzSids);
+                return map("total", n, "elapsed", ms(t));
             }, result)
         );
-        all.join(); // 等待全部完成
+        phase2.join(); // 等待全部完成
 
         result.put("total_elapsed", (System.currentTimeMillis() - totalStart) / 1000 + "s");
         try { overviewService.refreshSnapshot(); } catch (Exception ignored) {}
@@ -284,6 +311,28 @@ public class SyncController {
     public Result<Object> syncPurchasePlanInit() throws Exception {
         LocalDate now = LocalDate.now();
         return Result.ok(purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString()));
+    }
+
+    /** 同步 Amazon 订单利润数据（MSKU维度，仅5个字段，速度远快于产品表现接口） */
+    @PostMapping("/amz-order-profit")
+    public Result<Map<String, Object>> syncAmzOrderProfit() throws Exception {
+        long t = System.currentTimeMillis();
+        int count = amzProfitService.syncAll();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("total", count);
+        data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
+        return Result.ok(data);
+    }
+
+    /** 同步 Amazon 产品表现数据（MSKU维度，按 sid + sellerSku + country 区分站点） */
+    @PostMapping("/amz-product-performance")
+    public Result<Map<String, Object>> syncAmzProductPerformance() throws Exception {
+        long t = System.currentTimeMillis();
+        int count = amzPerfService.syncAll();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("total", count);
+        data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
+        return Result.ok(data);
     }
 
     /** 将键值对交替的参数组装为 Map。 */
