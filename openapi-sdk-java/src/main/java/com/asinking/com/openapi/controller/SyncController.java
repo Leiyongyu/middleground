@@ -12,6 +12,7 @@ import com.asinking.com.openapi.service.LingxingWarehouseStatementService;
 import com.asinking.com.openapi.service.LingxingPurchasePlanQueryService;
 import com.asinking.com.openapi.service.AmzOrderProfitService;
 import com.asinking.com.openapi.service.AmzProductPerformanceService;
+import com.asinking.com.openapi.service.AmzRestockSummaryService;
 import com.asinking.com.openapi.service.LingxingAmazonService;
 import com.asinking.com.openapi.service.LingxingEbayService;
 import com.asinking.com.openapi.service.LingxingShopService;
@@ -56,6 +57,7 @@ public class SyncController {
     private final LingxingAmazonService amazonService;
     private final AmzProductPerformanceService amzPerfService;
     private final AmzOrderProfitService amzProfitService;
+    private final AmzRestockSummaryService amzRestockService;
     private final LingxingShopService ebayShopService;
     private final InventoryOverviewService overviewService;
     private final com.asinking.com.openapi.service.DailyPriceTrackingService trackingService;
@@ -73,6 +75,7 @@ public class SyncController {
                           LingxingAmazonService amazonService,
                           AmzProductPerformanceService amzPerfService,
                           AmzOrderProfitService amzProfitService,
+                          AmzRestockSummaryService amzRestockService,
                           GoodcangSyncService goodcangSyncService,
                           GoodcangProductService goodcangProductService,
                           LingxingShopService ebayShopService,                          InventoryOverviewService overviewService,
@@ -90,6 +93,7 @@ public class SyncController {
         this.amazonService = amazonService;
         this.amzPerfService = amzPerfService;
         this.amzProfitService = amzProfitService;
+        this.amzRestockService = amzRestockService;
         this.goodcangSyncService = goodcangSyncService;
         this.goodcangProductService = goodcangProductService;
         this.ebayShopService = ebayShopService;        this.overviewService = overviewService;
@@ -311,6 +315,17 @@ public class SyncController {
     public Result<Object> syncPurchasePlanInit() throws Exception {
         LocalDate now = LocalDate.now();
         return Result.ok(purchasePlanQueryService.sync(now.minusDays(90).toString(), now.toString()));
+    }
+
+    /** 同步 Amazon 补货列表汇总（MSKU维度，FBA可售+FBA在途） */
+    @PostMapping("/amz-restock-summary")
+    public Result<Map<String, Object>> syncAmzRestockSummary() throws Exception {
+        long t = System.currentTimeMillis();
+        int count = amzRestockService.syncAll();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("total", count);
+        data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
+        return Result.ok(data);
     }
 
     /** 同步 Amazon 订单利润数据（MSKU维度，仅5个字段，速度远快于产品表现接口） */
