@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 @TableName("goodcang_grn_detail")
 /** 谷仓 GRN 入库单明细表 goodcang_grn_detail */
 public class GoodcangGrnDetailEntity {
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
     @TableField("receiving_code") private String receivingCode;
     @TableField("product_sku") private String productSku;
     @TableField("box_no") private String boxNo;

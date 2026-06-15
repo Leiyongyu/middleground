@@ -133,7 +133,6 @@ public class LingxingShopService {
             boolean isNew = false;
             if (entity == null) {
                 entity = new EbayShopListEntity();
-                entity.setId(uuid32());
                 entity.setStoreId(storeId);
                 entity.setSid("");
                 isNew = true;

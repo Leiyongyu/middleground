@@ -22,13 +22,11 @@ public interface UserService extends IService<UserEntity> {
     UserResponse createUser(String operatorUserId, String account, String password, String role, String ownerName);
 
     /** 更新用户信息（角色、负责人、密码）。 */
-    UserResponse updateUser(String operatorUserId, String id, String role, String ownerName, String password);
+    UserResponse updateUser(String operatorUserId, Long id, String role, String ownerName, String password);
 
-    /** 根据 ID 删除用户。 */
-    boolean deleteUser(String operatorUserId, String id);
+    boolean deleteUser(String operatorUserId, Long id);
 
-    /** 根据 ID 查询用户。 */
-    UserResponse getUserById(String id);
+    UserResponse getUserById(Long id);
 
     /** 分页查询用户（返回 UserEntity）。 */
     Page<UserEntity> pageUsers(long page, long size, String account, String role);

@@ -53,17 +53,14 @@ public class UserManageController {
      * 根据 ID 更新用户。
      */
     @PutMapping("/{id}")
-    public Result<UserResponse> update(@PathVariable String id, @RequestBody UserUpdateRequest req, HttpServletRequest request) {
+    public Result<UserResponse> update(@PathVariable Long id, @RequestBody UserUpdateRequest req, HttpServletRequest request) {
         requireAdmin(request);
         String operatorUserId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         return Result.ok(userService.updateUser(operatorUserId, id, req.getRole(), req.getOwnerName(), req.getPassword()));
     }
 
-    /**
-     * 根据 ID 删除用户。
-     */
     @DeleteMapping("/{id}")
-    public Result<Map<String, Object>> delete(@PathVariable String id, HttpServletRequest request) {
+    public Result<Map<String, Object>> delete(@PathVariable Long id, HttpServletRequest request) {
         requireAdmin(request);
         String operatorUserId = String.valueOf(request.getAttribute(JwtAuthInterceptor.ATTR_USER_ID));
         boolean ok = userService.deleteUser(operatorUserId, id);
@@ -82,7 +79,7 @@ public class UserManageController {
      * 根据 ID 查询用户详情。
      */
     @GetMapping("/{id}")
-    public Result<UserResponse> detail(@PathVariable String id) {
+    public Result<UserResponse> detail(@PathVariable Long id) {
         return Result.ok(userService.getUserById(id));
     }
 

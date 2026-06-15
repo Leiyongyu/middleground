@@ -61,7 +61,6 @@ public class GoodcangSyncService {
                 boolean isNewList = (le == null);
                 if (isNewList) {
                     le = new GoodcangGrnListEntity();
-                    le.setId(uuid32());
                     le.setReceivingCode(code);
                 }
                 le.setWarehouseCode(str(item.get("warehouse_code")));
@@ -93,7 +92,6 @@ public class GoodcangSyncService {
                                     .eq(GoodcangGrnDetailEntity::getReceivingCode, code));
                             for (Map<String, Object> td : items) {
                                 GoodcangGrnDetailEntity de = new GoodcangGrnDetailEntity();
-                                de.setId(uuid32());
                                 de.setReceivingCode(code);
                                 de.setProductSku(str(td.get("product_sku")));
                                 de.setBoxNo(str(td.get("box_no")));
@@ -154,7 +152,6 @@ public class GoodcangSyncService {
                                 .eq(GoodcangGrnDetailEntity::getReceivingCode, code));
                         for (Map<String, Object> td : items) {
                             GoodcangGrnDetailEntity de = new GoodcangGrnDetailEntity();
-                            de.setId(uuid32());
                             de.setReceivingCode(code);
                             de.setProductSku(str(td.get("product_sku")));
                             de.setBoxNo(str(td.get("box_no")));
@@ -195,7 +192,6 @@ public class GoodcangSyncService {
 
             for (Map<String, Object> wp : wpList) {
                 GoodcangWarehouseEntity e = new GoodcangWarehouseEntity();
-                e.setId(uuid32());
                 e.setWarehouseCode(warehouseCode);
                 e.setWarehouseName(warehouseName);
                 e.setCountryCode(countryCode);
@@ -226,5 +222,4 @@ public class GoodcangSyncService {
         return new SaleStatSyncResponse(count, count, Collections.singletonList(info));
     }
 
-    private String uuid32() { return UUID.randomUUID().toString().replace("-", ""); }
 }

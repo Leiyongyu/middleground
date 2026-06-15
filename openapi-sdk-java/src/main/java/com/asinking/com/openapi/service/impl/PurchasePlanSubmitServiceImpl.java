@@ -31,7 +31,6 @@ public class PurchasePlanSubmitServiceImpl extends ServiceImpl<PurchasePlanSubmi
     public int batchSubmit(List<PurchasePlanSubmitEntity> items) {
         if (items == null || items.isEmpty()) return 0;
         for (PurchasePlanSubmitEntity e : items) {
-            if (e.getId() == null || e.getId().isEmpty()) e.setId(uuid32());
         }
         saveBatch(items);
         return items.size();
@@ -79,5 +78,4 @@ public class PurchasePlanSubmitServiceImpl extends ServiceImpl<PurchasePlanSubmi
         return new PageResult<>(result.getTotal(), result.getCurrent(), result.getSize(), records);
     }
 
-    private String uuid32() { return UUID.randomUUID().toString().replace("-", ""); }
 }

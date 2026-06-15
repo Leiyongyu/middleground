@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 @TableName("purchase_plan")
 /** 采购计划表 purchase_plan（领星同步） */
 public class PurchasePlanEntity {
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     @TableField("plan_sn") private String planSn;
     @TableField("ppg_sn") private String ppgSn;

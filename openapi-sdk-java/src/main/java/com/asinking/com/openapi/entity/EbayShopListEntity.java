@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 /** eBay 店铺列表表 ebay_shop_list */
 public class EbayShopListEntity {
 
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     private String storeId;
 

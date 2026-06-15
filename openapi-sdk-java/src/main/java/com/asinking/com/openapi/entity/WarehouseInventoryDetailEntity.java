@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 public class WarehouseInventoryDetailEntity {
 
     @TableId(value = "id", type = IdType.ASSIGN_ID)
-    private String id;
+    private Long id;
 
     @TableField("wid")
     private Integer wid; // 仓库id

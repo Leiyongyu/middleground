@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 @TableName("purchase_order")
 /** 采购订单表 purchase_order（领星同步） */
 public class PurchaseOrderEntity {
-    @TableId(value = "id", type = IdType.INPUT) private String id;
+    @TableId(value = "id", type = IdType.AUTO) private Long id;
     @TableField("order_sn") private String orderSn;
     @TableField("custom_order_sn") private String customOrderSn;
     @TableField("supplier_id") private Integer supplierId;

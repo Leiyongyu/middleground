@@ -25,7 +25,7 @@ public class BrandOwnerEntity {
     private String ownerName;
 
     @TableField("user_id")
-    private String userId;  // 对应 user 表的 id (UUID)
+    private Long userId;
 
     @TableField(value = "create_time", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime createTime;

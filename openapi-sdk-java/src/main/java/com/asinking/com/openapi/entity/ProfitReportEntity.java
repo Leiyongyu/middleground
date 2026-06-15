@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 @TableName("profit_report")
 /** 利润报表表 profit_report */
 public class ProfitReportEntity {
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
     @TableField("file_name") private String fileName;
     @TableField("msku") private String msku;
     @TableField("platform") private String platform;

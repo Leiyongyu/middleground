@@ -70,7 +70,6 @@ public class LingxingWarehouseStatementService {
                 boolean isNew = (e == null);
                 if (isNew) {
                     e = new WarehouseStatementEntity();
-                    e.setId(uuid32());
                     e.setStatementId(str(item.get("statement_id")));
                     e.setWid(wid);
                     e.setSku(sku);
@@ -142,5 +141,4 @@ public class LingxingWarehouseStatementService {
         return t != null ? t.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : "";
     }
     /** 生成 32 位 UUID（去掉横线）。 */
-    private String uuid32() { return UUID.randomUUID().toString().replace("-", ""); }
 }

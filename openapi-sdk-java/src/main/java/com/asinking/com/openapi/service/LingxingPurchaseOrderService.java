@@ -61,7 +61,6 @@ public class LingxingPurchaseOrderService {
 
                 PurchaseOrderEntity e = existing.get(key);
                 boolean isNew = (e == null);
-                if (isNew) { e = new PurchaseOrderEntity(); e.setId(uuid32()); e.setOrderSn(orderSn); e.setCreateTime(createTime); }
                 e.setCustomOrderSn(str(order.get("custom_order_sn")));
                 e.setSupplierId(intVal(order.get("supplier_id")));
                 e.setSupplierName(str(order.get("supplier_name")));
@@ -118,5 +117,4 @@ public class LingxingPurchaseOrderService {
     private java.math.BigDecimal dec(Object v) { if (v == null) return java.math.BigDecimal.ZERO; try { return new java.math.BigDecimal(String.valueOf(v)); } catch (Exception e) { return java.math.BigDecimal.ZERO; } }
     private LocalDateTime parseDT(String s) { if (s == null || s.isEmpty()) return null; try { return LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")); } catch (Exception e) { return null; } }
     private String fmtTime(LocalDateTime t) { return t != null ? t.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : ""; }
-    private String uuid32() { return UUID.randomUUID().toString().replace("-", ""); }
 }

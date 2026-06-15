@@ -163,7 +163,6 @@ public class LingxingWarehouseInventoryService {
             }
 
             WarehouseInventoryDetailEntity entity = new WarehouseInventoryDetailEntity();
-            entity.setId(uuid32());
             entity.setWid(wid);
             entity.setProductId(productId);
             entity.setSku(getString(row, "sku"));
@@ -324,7 +323,6 @@ public class LingxingWarehouseInventoryService {
             boolean isNew = false;
             if (entity == null) {
                 entity = new WarehouseInventoryDetailEntity();
-                entity.setId(uuid32());
                 entity.setWid(wid);
                 entity.setProductId(productId);
                 isNew = true;

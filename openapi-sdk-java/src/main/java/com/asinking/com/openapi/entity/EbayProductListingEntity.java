@@ -15,8 +15,8 @@ import java.time.LocalDateTime;
 /** eBay 商品刊登表 ebay_product_listing */
 public class EbayProductListingEntity {
 
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     private String platform;
 

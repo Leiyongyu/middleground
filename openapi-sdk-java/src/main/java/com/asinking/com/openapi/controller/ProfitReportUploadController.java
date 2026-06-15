@@ -113,7 +113,6 @@ public class ProfitReportUploadController {
                 mapper.updateById(exist);
                 updated++;
             } else {
-                e.setId(ExcelUtils.uuid32());
                 mapper.insert(e);
                 existingMap.put(key, e);
                 inserted++;

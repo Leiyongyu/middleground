@@ -113,7 +113,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
         }
 
         UserEntity entity = new UserEntity();
-        entity.setId(UUID.randomUUID().toString());
         entity.setAccount(account.trim());
         entity.setPassword(passwordEncoder.encode(password));
         entity.setRole(parseRole(role));
@@ -128,8 +127,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
 
     /** 按 ID 更新用户角色、负责人或密码。 */
     @Override
-    public UserResponse updateUser(String operatorUserId, String id, String role, String ownerName, String password) {
-        if (!StringUtils.hasText(id)) {
+    public UserResponse updateUser(String operatorUserId, Long id, String role, String ownerName, String password) {
+        if (id == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "id 不能为空");
         }
 
@@ -160,17 +159,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
 
     /** 按 ID 删除用户。 */
     @Override
-    public boolean deleteUser(String operatorUserId, String id) {
-        if (!StringUtils.hasText(id)) {
+    public boolean deleteUser(String operatorUserId, Long id) {
+        if (id == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "id 不能为空");
         }
         return removeById(id);
     }
 
-    /** 按 ID 查询用户。 */
     @Override
-    public UserResponse getUserById(String id) {
-        if (!StringUtils.hasText(id)) {
+    public UserResponse getUserById(Long id) {
+        if (id == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "id 不能为空");
         }
         UserEntity entity = getById(id);
@@ -213,7 +211,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
     /** 将 UserEntity 转为 UserResponse（携带品牌归属索引，避免 N+1 查询） */
     private UserResponse toResponse(UserEntity entity, Map<String, List<String>> brandIndex) {
         UserResponse resp = new UserResponse();
-        resp.setId(entity.getId());
+        resp.setId(String.valueOf(entity.getId()));
         resp.setAccount(entity.getAccount());
         resp.setRole(entity.getRole() != null && entity.getRole() == 1 ? "admin" : "user");
         resp.setOwnerName(entity.getOwnerName());

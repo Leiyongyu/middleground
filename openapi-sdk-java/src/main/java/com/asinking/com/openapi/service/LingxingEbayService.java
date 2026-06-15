@@ -247,7 +247,6 @@ public class LingxingEbayService {
             boolean isNew = false;
             if (entity == null) {
                 entity = new EbayProductListingEntity();
-                entity.setId(uuid32());
                 entity.setPlatform("eBay");
                 entity.setItemId(itemId);
                 isNew = true;

@@ -2,7 +2,6 @@ package com.asinking.com.openapi.config;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -73,7 +72,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
     private Bucket createBucket(int perMinute) {
         return Bucket.builder()
-                .addLimit(Bandwidth.classic(perMinute, Refill.greedy(perMinute, Duration.ofMinutes(1))))
+                .addLimit(Bandwidth.builder().capacity(perMinute).refillGreedy(perMinute, Duration.ofMinutes(1)).build())
                 .build();
     }
 

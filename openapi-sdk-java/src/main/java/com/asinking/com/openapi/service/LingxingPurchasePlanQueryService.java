@@ -57,7 +57,6 @@ public class LingxingPurchasePlanQueryService {
 
                 PurchasePlanEntity e = existing.get(key);
                 boolean isNew = (e == null);
-                if (isNew) { e = new PurchasePlanEntity(); e.setId(uuid32()); e.setPlanSn(planSn); e.setSku(sku); }
 
                 e.setPpgSn(str(item.get("ppg_sn")));
                 e.setProductName(str(item.get("product_name")));
@@ -143,5 +142,4 @@ public class LingxingPurchasePlanQueryService {
     /** 对象转 JSON 字符串，null 返回 null。 */
     private String toJson(Object v) { return v != null ? JSON.toJSONString(v) : null; }
     /** 生成 32 位 UUID（去掉横线）。 */
-    private String uuid32() { return UUID.randomUUID().toString().replace("-", ""); }
 }

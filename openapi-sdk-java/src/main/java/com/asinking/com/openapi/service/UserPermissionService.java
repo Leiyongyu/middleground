@@ -89,7 +89,7 @@ public class UserPermissionService {
         }
 
         String roleLabel = isAdmin ? "admin" : "user";
-        return new UserPermission(u.getId(), roleLabel, isAdmin, brands, u.getOwnerName());
+        return new UserPermission(String.valueOf(u.getId()), roleLabel, isAdmin, brands, u.getOwnerName());
     }
 
     // ===== DTO =====

@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 @TableName("warehouse_statement")
 /** 仓库库存流水表 warehouse_statement */
 public class WarehouseStatementEntity {
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
     @TableField("statement_id") private String statementId;
     @TableField("wid") private Integer wid;
     @TableField("ware_house_name") private String wareHouseName;

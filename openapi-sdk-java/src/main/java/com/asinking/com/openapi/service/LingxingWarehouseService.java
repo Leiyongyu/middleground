@@ -208,7 +208,6 @@ public class LingxingWarehouseService {
             boolean isNew = false;
             if (entity == null) {
                 entity = new WarehouseEntity();
-                entity.setId(uuid32());
                 entity.setWid(wid);
                 existing.put(wid, entity);
                 isNew = true;

@@ -9,8 +9,8 @@ import java.time.LocalDateTime;
 /** 采购计划提交记录表 purchase_plan_submit */
 public class PurchasePlanSubmitEntity {
 
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     @TableField("sku") private String sku;
     @TableField("wid") private Integer wid;

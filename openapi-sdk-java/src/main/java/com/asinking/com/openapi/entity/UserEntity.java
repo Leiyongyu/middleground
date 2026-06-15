@@ -14,8 +14,8 @@ import java.time.LocalDateTime;
 /** 系统用户表 user */
 public class UserEntity {
 
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     @TableField("account")
     private String account;

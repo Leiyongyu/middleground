@@ -67,7 +67,6 @@ public class EbaySalesController {
             boolean isNew = (e == null);
             if (isNew) {
                 e = new EbaySalesEntity();
-                e.setId(ExcelUtils.uuid32());
                 e.setPlatformOrderNo(orderNo);
                 e.setSku(sku);
                 inserted++;

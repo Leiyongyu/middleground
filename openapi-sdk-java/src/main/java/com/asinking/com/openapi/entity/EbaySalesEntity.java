@@ -8,8 +8,8 @@ import java.time.LocalDateTime;
 @TableName("ebay_sales")
 /** eBay 销量表 ebay_sales */
 public class EbaySalesEntity {
-    @TableId(value = "id", type = IdType.INPUT)
-    private String id;
+    @TableId(value = "id", type = IdType.AUTO)
+    private Long id;
 
     @TableField("platform_order_no") private String platformOrderNo;
     @TableField("currency") private String currency;
