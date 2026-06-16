@@ -12,7 +12,6 @@ const message = useMessage()
 const loading = ref(false)
 const rows = ref([])
 const totalRecords = ref(0)
-const searchKeyword = ref('')
 const currentPage = ref(1)
 const pageSize = ref(100)
 
@@ -112,10 +111,6 @@ function handleSortClick(key) {
 
 const filteredRows = computed(() => {
   let result = rows.value
-  if (searchKeyword.value.trim()) {
-    const kw = searchKeyword.value.trim().toLowerCase()
-    result = result.filter(r => r.sellerSku.toLowerCase().includes(kw) || r.warehouseSku.toLowerCase().includes(kw))
-  }
   if (sortField.value) {
     const f = sortField.value; const asc = sortOrder.value === 'asc'
     result = [...result].sort((a, b) => {
@@ -149,6 +144,7 @@ const columns = [
   { title: 'MSKU', key: 'sellerSku', width: 150, fixed: 'left', ellipsis: { tooltip: true } },
   { title: '店铺', key: 'store', width: 160, fixed: 'left' },
   { title: '仓库SKU', key: 'warehouseSku', width: 130, ellipsis: { tooltip: true } },
+  { title: '仓库', key: 'warehouseName', width: 130, ellipsis: { tooltip: true } },
   { title: 'ASIN', key: 'asin', width: 130, ellipsis: { tooltip: true } },
   { title: '评分', key: 'rating', width: 165, render: (row) => {
       const r = row.rating != null && !isNaN(Number(row.rating)) ? Number(row.rating) : 0
@@ -249,7 +245,6 @@ const checkedRowKeys = ref([])
         <template #header-extra>
           <NSpace align="center" size="small">
             <NTag size="small" :bordered="false" type="default">共 {{ totalRecords }} 条</NTag>
-            <NInput v-model:value="searchKeyword" placeholder="搜索 SKU" clearable size="small" style="width: 180px" />
             <NButton size="small" secondary :loading="loading" @click="handleRefresh">
               <template #icon>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>

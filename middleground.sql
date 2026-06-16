@@ -11,7 +11,7 @@
  Target Server Version : 90700 (9.7.0)
  File Encoding         : 65001
 
- Date: 15/06/2026 15:53:33
+ Date: 16/06/2026 16:04:01
 */
 
 SET NAMES utf8mb4;
@@ -24,15 +24,18 @@ DROP TABLE IF EXISTS `amz_inventory_overview`;
 CREATE TABLE `amz_inventory_overview`  (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `sid` int NOT NULL DEFAULT 0 COMMENT '店铺ID',
-  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'Seller SKU',
-  `warehouse_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '仓库SKU',
-  `store` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '店铺',
+  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Seller SKU',
+  `warehouse_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '仓库SKU',
+  `warehouse_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '仓库名称',
+  `asin` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'ASIN',
+  `principal_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '负责人',
+  `store` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '店铺',
   `last_star` decimal(3, 1) NULL DEFAULT NULL COMMENT '评分',
   `review_num` int NULL DEFAULT 0 COMMENT '评论数',
   `ad_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '广告费率',
   `profit_rate30d` decimal(10, 4) NULL DEFAULT NULL,
   `refund_rate90d` decimal(10, 4) NULL DEFAULT NULL,
-  `product_category` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '产品分类',
+  `product_category` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '产品分类',
   `purchased_qty` int NULL DEFAULT 0 COMMENT '已采购数量',
   `domestic_stock` int NULL DEFAULT 0 COMMENT '国内仓数量',
   `pending_ship` int NULL DEFAULT 0 COMMENT '待出库',
@@ -53,7 +56,23 @@ CREATE TABLE `amz_inventory_overview`  (
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 104985 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'Amazon补货数据预计算表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 1060239 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon补货数据预计算表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for amz_order_profit
+-- ----------------------------
+DROP TABLE IF EXISTS `amz_order_profit`;
+CREATE TABLE `amz_order_profit`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `sid` int NOT NULL COMMENT '店铺ID',
+  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Seller SKU',
+  `gross_margin` decimal(10, 4) NULL DEFAULT NULL COMMENT '毛利率',
+  `spend_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '广告费率',
+  `refund_amount_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '退款率',
+  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 13280 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon订单利润表(MSKU维度)' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for amz_product_listing
@@ -62,79 +81,62 @@ DROP TABLE IF EXISTS `amz_product_listing`;
 CREATE TABLE `amz_product_listing`  (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `sid` int NOT NULL COMMENT '店铺sid',
-  `marketplace` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '国家',
-  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'MSKU',
-  `fnsku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT 'FNSKU',
-  `asin` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT 'ASIN',
-  `parent_asin` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '父ASIN',
-  `item_name` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '标题',
-  `local_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '本地SKU',
-  `local_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '品名',
-  `currency_code` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '币种',
-  `price` decimal(10, 2) NULL DEFAULT 0.00 COMMENT '价格',
-  `landed_price` decimal(10, 2) NULL DEFAULT 0.00 COMMENT '总价',
-  `listing_price` decimal(10, 2) NULL DEFAULT 0.00 COMMENT '优惠价',
-  `shipping` decimal(10, 2) NULL DEFAULT 0.00 COMMENT '运费',
-  `fbm_quantity` int NULL DEFAULT 0 COMMENT 'FBM库存',
-  `fba_fulfillable` int NULL DEFAULT 0 COMMENT 'FBA可售',
-  `fba_unsellable` int NULL DEFAULT 0 COMMENT 'FBA不可售',
-  `reserved_fc_transfers` int NULL DEFAULT 0 COMMENT '待调仓',
-  `reserved_fc_processing` int NULL DEFAULT 0 COMMENT '调仓中',
-  `reserved_customerorders` int NULL DEFAULT 0 COMMENT '待发货',
-  `inbound_shipped` int NULL DEFAULT 0 COMMENT '在途',
-  `inbound_working` int NULL DEFAULT 0 COMMENT '计划入库',
-  `inbound_receiving` int NULL DEFAULT 0 COMMENT '入库中',
+  `marketplace` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '国家',
+  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MSKU',
+  `asin` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'ASIN',
+  `local_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '本地SKU',
+  `local_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '品名',
   `review_num` int NULL DEFAULT 0 COMMENT '评论数',
-  `last_star` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '星级评分',
-  `days7_sales` int NULL DEFAULT 0,
-  `days14_sales` int NULL DEFAULT 0,
-  `days30_sales` int NULL DEFAULT 0,
-  `yesterday_sales` int NULL DEFAULT 0 COMMENT '昨天销量',
-  `yesterday_amount` decimal(10, 2) NULL DEFAULT 0.00 COMMENT '昨天销售额',
-  `days7_amount` decimal(10, 2) NULL DEFAULT 0.00,
-  `days14_amount` decimal(10, 2) NULL DEFAULT 0.00,
-  `days30_amount` decimal(10, 2) NULL DEFAULT 0.00,
-  `fulfillment_channel` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT 'FBA/FBM',
-  `status` tinyint NULL DEFAULT 1 COMMENT '0停售 1在售',
-  `is_delete` tinyint NULL DEFAULT 0 COMMENT '0否 1是',
-  `seller_brand` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '品牌',
+  `last_star` varchar(5) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '星级评分',
+  `principal_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'Listing负责人',
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE,
   INDEX `idx_asin`(`asin` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 37765 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'Amazon商品Listing' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 37794 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon商品Listing' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
--- Table structure for amz_product_performance
+-- Table structure for amz_restock_summary
 -- ----------------------------
-DROP TABLE IF EXISTS `amz_product_performance`;
-CREATE TABLE `amz_product_performance`  (
+DROP TABLE IF EXISTS `amz_restock_summary`;
+CREATE TABLE `amz_restock_summary`  (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `sid` int NOT NULL COMMENT '店铺id',
-  `mid` int NULL DEFAULT 0 COMMENT '站点ID',
-  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT 'MSKU',
-  `local_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '仓库SKU',
-  `country` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '国家',
-  `seller_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL DEFAULT '' COMMENT '店铺名',
-  `avg_star` decimal(3, 1) NULL DEFAULT NULL COMMENT '评分',
-  `reviews_count` int NULL DEFAULT 0 COMMENT '评论数',
-  `volume` int NULL DEFAULT 0 COMMENT '销量',
-  `amount` decimal(16, 4) NULL DEFAULT 0.0000 COMMENT '销售额',
-  `gross_profit` decimal(16, 4) NULL DEFAULT NULL COMMENT '结算毛利',
-  `gross_margin` decimal(10, 4) NULL DEFAULT NULL COMMENT '结算毛利率',
-  `return_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '退款率',
-  `afn_fulfillable` int NULL DEFAULT 0 COMMENT 'FBA可售',
-  `afn_inbound_shipped` int NULL DEFAULT 0 COMMENT 'FBA在途',
-  `afn_total_inbound` int NULL DEFAULT 0 COMMENT 'FBA总入库',
-  `fbm_quantity` int NULL DEFAULT 0 COMMENT 'FBM可售',
-  `clicks` int NULL DEFAULT 0 COMMENT '点击量',
-  `sessions_total` int NULL DEFAULT 0 COMMENT 'Sessions',
-  `buy_box_percentage` decimal(10, 4) NULL DEFAULT NULL COMMENT 'Buybox',
-  `adv_rate` decimal(10, 4) NULL DEFAULT NULL COMMENT '广告订单占比',
+  `hash_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '领星唯一标识',
+  `node_type` int NULL DEFAULT NULL COMMENT '节点类型:1共享库存父行,2共享库存子行,3非共享库存,4汇总行',
+  `sid` int NOT NULL COMMENT '店铺ID',
+  `msku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MSKU',
+  `sync_time` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '数据更新时间',
+  `fba_sellable` int NULL DEFAULT 0 COMMENT 'FBA可售',
+  `fba_inbound` int NULL DEFAULT 0 COMMENT 'FBA在途',
+  `fba_reserved` int NULL DEFAULT 0 COMMENT 'FBA预留',
+  `sales_7d` int NULL DEFAULT 0 COMMENT '近7天销量',
+  `sales_14d` int NULL DEFAULT 0 COMMENT '近14天销量',
+  `sales_30d` int NULL DEFAULT 0 COMMENT '近30天销量',
+  `sales_60d` int NULL DEFAULT 0 COMMENT '近60天销量',
+  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `avg_sales_14d` decimal(10, 2) NULL DEFAULT NULL COMMENT '14日均销量',
+  `avg_sales_30d` decimal(10, 2) NULL DEFAULT NULL COMMENT '30日均销量',
+  `avg_sales_60d` decimal(10, 2) NULL DEFAULT NULL COMMENT '60日均销量',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_hash_id`(`hash_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 47729 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'amz补货建议表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for amz_warehouse_inventory_detail
+-- ----------------------------
+DROP TABLE IF EXISTS `amz_warehouse_inventory_detail`;
+CREATE TABLE `amz_warehouse_inventory_detail`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `wid` int NOT NULL COMMENT '仓库ID',
+  `seller_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '卖家ID',
+  `sku` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SKU',
+  `product_valid_num` int NULL DEFAULT 0 COMMENT '可用库存',
+  `quantity_receive` decimal(10, 2) NULL DEFAULT NULL COMMENT '待收数量',
+  `product_lock_num` int NULL DEFAULT 0 COMMENT '锁定库存',
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1889 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = 'Amazon产品表现表(MSKU维度)' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_wid_sku`(`wid` ASC, `sku` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 2382 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'AMZ仓库库存明细' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for brand_owner
@@ -257,7 +259,7 @@ CREATE TABLE `ebay_sales`  (
   INDEX `idx_payment_time`(`payment_time` ASC) USING BTREE,
   INDEX `idx_payment_currency`(`payment_time` ASC, `currency` ASC) USING BTREE,
   INDEX `idx_sku_currency_payment`(`sku` ASC, `currency` ASC, `payment_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 19317 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'eBay销量表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 19014 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'eBay销量表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for goodcang_grn_detail
@@ -482,7 +484,7 @@ CREATE TABLE `purchase_order`  (
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE,
   INDEX `idx_item_sku`(`item_sku` ASC) USING BTREE,
   INDEX `idx_create_time_status`(`create_time` ASC, `status_text` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4784 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购单(全字段)' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 4763 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购单(全字段)' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for purchase_plan
@@ -537,7 +539,7 @@ CREATE TABLE `purchase_plan`  (
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE,
   INDEX `idx_status_upload`(`status_text` ASC, `upload_time` ASC) USING BTREE,
   INDEX `idx_upload_time`(`upload_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2234 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购计划(全字段)' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 2231 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购计划(全字段)' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for purchase_plan_submit
@@ -616,7 +618,7 @@ CREATE TABLE `team`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `user`;
 CREATE TABLE `user`  (
-  `id` bigint NOT NULL DEFAULT (uuid()) AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `account` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '账号，唯一',
   `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '密码（加密后存储，如BCrypt、MD5等）',
   `role` tinyint NOT NULL DEFAULT 2 COMMENT '1=管理员,2=用户',

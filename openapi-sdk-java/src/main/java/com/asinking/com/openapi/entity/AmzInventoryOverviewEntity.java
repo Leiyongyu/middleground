@@ -13,6 +13,7 @@ public class AmzInventoryOverviewEntity {
     private Integer sid;
     private String sellerSku;
     private String warehouseSku;
+    private String warehouseName;
     private String asin;
     private String principalName;
     private String store;
@@ -27,8 +28,10 @@ public class AmzInventoryOverviewEntity {
     @JsonProperty("refundRate90")
     private BigDecimal refundRate90d;
     private String productCategory;
+    @JsonProperty("purchased")
     private Integer purchasedQty;
     private Integer domesticStock;
+    @JsonProperty("lockNum")
     private Integer pendingShip;
     @JsonProperty("fbStock")
     private Integer fbaStock;
