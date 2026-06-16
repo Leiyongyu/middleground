@@ -147,8 +147,9 @@ function renderSortIcon(key) {
 const columns = [
   { type: 'selection', multiple: true, width: 40, fixed: 'left' },
   { title: 'MSKU', key: 'sellerSku', width: 150, fixed: 'left', ellipsis: { tooltip: true } },
-  { title: '仓库SKU', key: 'warehouseSku', width: 130, ellipsis: { tooltip: true } },
   { title: '店铺', key: 'store', width: 160, fixed: 'left' },
+  { title: '仓库SKU', key: 'warehouseSku', width: 130, ellipsis: { tooltip: true } },
+  { title: 'ASIN', key: 'asin', width: 130, ellipsis: { tooltip: true } },
   { title: '评分', key: 'rating', width: 165, render: (row) => {
       const r = row.rating != null && !isNaN(Number(row.rating)) ? Number(row.rating) : 0
       if (r > 5) return ''
@@ -178,13 +179,14 @@ const columns = [
   { title: '14天销量', key: 'sales14', width: 90 },
   { title: '30天销量', key: 'sales30', width: 90 },
   { title: '60天销量', key: 'sales60', width: 90 },
-  { title: '14天销售速度', key: 'speed14', width: 120, render: (row) => row.speed14 != null ? row.speed14 + ' 单/天' : '' },
-  { title: '30天销售速度', key: 'speed30', width: 120, render: (row) => row.speed30 != null ? row.speed30 + ' 单/天' : '' },
-  { title: '60天销售速度', key: 'speed60', width: 120, render: (row) => row.speed60 != null ? row.speed60 + ' 单/天' : '' },
+  { title: '14日均销量', key: 'speed14', width: 120 },
+  { title: '30日均销量', key: 'speed30', width: 120 },
+  { title: '60日均销量', key: 'speed60', width: 120 },
   { title: '安全库存', key: 'safetyStock', width: 90 },
   { title: '平均月销量', key: 'avgMonthly', width: 110 },
   { title: '补货量', key: 'replenishQty', width: 90 },
   { title: '发货量', key: 'shipment', width: 90 },
+  { title: '负责人', key: 'principalName', width: 100, ellipsis: { tooltip: true } },
 ].map(c => ({ ...c, resizable: false, minWidth: 60 }))
 
 const columnMap = columns.reduce((m, c) => { if (c.key) m[c.key] = c.title; return m }, {})

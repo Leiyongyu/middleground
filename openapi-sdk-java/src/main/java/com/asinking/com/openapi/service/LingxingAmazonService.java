@@ -136,40 +136,16 @@ public class LingxingAmazonService {
 
     private void fillFields(AmzProductListingEntity e, Map<String, Object> row) {
         e.setMarketplace(getStr(row, "marketplace"));
-        e.setFnsku(getStr(row, "fnsku"));
         e.setAsin(getStr(row, "asin"));
-        e.setParentAsin(getStr(row, "parent_asin"));
-        e.setItemName(getStr(row, "item_name"));
         e.setLocalSku(getStr(row, "local_sku"));
         e.setLocalName(getStr(row, "local_name"));
-        e.setCurrencyCode(getStr(row, "currency_code"));
-        e.setPrice(getBd(row, "price"));
-        e.setLandedPrice(getBd(row, "landed_price"));
-        e.setListingPrice(getBd(row, "listing_price"));
-        e.setShipping(getBd(row, "shipping"));
-        e.setFbmQuantity(getInt(row, "quantity"));
-        e.setFbaFulfillable(getInt(row, "afn_fulfillable_quantity"));
-        e.setFbaUnsellable(getInt(row, "afn_unsellable_quantity"));
-        e.setReservedFcTransfers(getInt(row, "reserved_fc_transfers"));
-        e.setReservedFcProcessing(getInt(row, "reserved_fc_processing"));
-        e.setReservedCustomerorders(getInt(row, "reserved_customerorders"));
-        e.setInboundShipped(getInt(row, "afn_inbound_shipped_quantity"));
-        e.setInboundWorking(getInt(row, "afn_inbound_working_quantity"));
-        e.setInboundReceiving(getInt(row, "afn_inbound_receiving_quantity"));
         e.setReviewNum(getInt(row, "review_num"));
         e.setLastStar(getStr(row, "last_star"));
-        e.setDays7Sales(getInt(row, "total_volume"));
-        e.setDays14Sales(getInt(row, "fourteen_volume"));
-        e.setDays30Sales(getInt(row, "thirty_volume"));
-        e.setYesterdaySales(getInt(row, "yesterday_volume"));
-        e.setYesterdayAmount(getBd(row, "yesterday_amount"));
-        e.setDays7Amount(getBd(row, "seven_amount"));
-        e.setDays14Amount(getBd(row, "fourteen_amount"));
-        e.setDays30Amount(getBd(row, "thirty_amount"));
-        e.setFulfillmentChannel(getStr(row, "fulfillment_channel_type"));
-        e.setStatus(getIntObj(row, "status"));
-        e.setIsDelete(getIntObj(row, "is_delete"));
-        e.setSellerBrand(getStr(row, "seller_brand"));
+        // principal_info 是数组: [{ principal_name: "xxx", ... }]
+        List<Map<String, Object>> piList = getList(row, "principal_info");
+        if (piList != null && !piList.isEmpty()) {
+            e.setPrincipalName(getStr(piList.get(0), "principal_name"));
+        }
     }
 
     // ==== helpers ====
@@ -189,6 +165,8 @@ public class LingxingAmazonService {
         if (v instanceof Number) return ((Number)v).intValue();
         try { return Integer.parseInt(String.valueOf(v)); } catch (Exception e) { return null; }
     }
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getMap(Map<String, Object> m, String k) { Object v = m.get(k); return v instanceof Map ? (Map<String, Object>) v : null; }
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> getList(Map<String, Object> m, String k) {
         Object v = m.get(k); return v instanceof List ? (List<Map<String, Object>>) v : Collections.emptyList();

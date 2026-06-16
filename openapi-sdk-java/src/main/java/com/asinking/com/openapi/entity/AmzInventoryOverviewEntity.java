@@ -13,6 +13,8 @@ public class AmzInventoryOverviewEntity {
     private Integer sid;
     private String sellerSku;
     private String warehouseSku;
+    private String asin;
+    private String principalName;
     private String store;
     @JsonProperty("rating")
     private BigDecimal lastStar;
@@ -28,15 +30,25 @@ public class AmzInventoryOverviewEntity {
     private Integer purchasedQty;
     private Integer domesticStock;
     private Integer pendingShip;
+    @JsonProperty("fbStock")
     private Integer fbaStock;
+    @JsonProperty("fbaOnway")
     private Integer fbaInbound;
+    @JsonProperty("totalStock")
     private Integer totalInventory;
+    @JsonProperty("sales7")
     private Integer sales7d;
+    @JsonProperty("sales14")
     private Integer sales14d;
+    @JsonProperty("sales30")
     private Integer sales30d;
+    @JsonProperty("sales60")
     private Integer sales60d;
+    @JsonProperty("speed14")
     private BigDecimal salesSpeed14d;
+    @JsonProperty("speed30")
     private BigDecimal salesSpeed30d;
+    @JsonProperty("speed60")
     private BigDecimal salesSpeed60d;
     private Integer safetyStock;
     private Integer avgMonthlySales;

@@ -2,7 +2,6 @@ package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.service.LingxingAuthService;
 import com.asinking.com.openapi.service.AmazonComputeService;
-import com.asinking.com.openapi.service.AmzProductPerformanceService;
 import com.asinking.com.openapi.service.LingxingAmazonService;
 import com.asinking.com.openapi.service.LingxingEbayService;
 import com.asinking.com.openapi.service.LingxingPlatformOrderService;
@@ -15,7 +14,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  */
@@ -29,19 +30,16 @@ public class LingxingDebugController {
     private final LingxingPlatformOrderService platformOrderService;
     private final LingxingAmazonService amazonService;
     private final AmazonComputeService amazonComputeService;
-    private final AmzProductPerformanceService amzProductPerformanceService;
 
     public LingxingDebugController(LingxingAuthService authService, LingxingShopService shopService,
                                    LingxingEbayService ebayService, LingxingPlatformOrderService platformOrderService,
-                                   LingxingAmazonService amazonService, AmazonComputeService amazonComputeService,
-                                   AmzProductPerformanceService amzProductPerformanceService) {
+                                   LingxingAmazonService amazonService, AmazonComputeService amazonComputeService) {
         this.authService = authService;
         this.shopService = shopService;
         this.ebayService = ebayService;
         this.platformOrderService = platformOrderService;
         this.amazonService = amazonService;
         this.amazonComputeService = amazonComputeService;
-        this.amzProductPerformanceService = amzProductPerformanceService;
     }
 
     /**
@@ -67,11 +65,6 @@ public class LingxingDebugController {
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "200") int length) throws Exception {
         return shopService.getActiveShops(10001, offset, length);
-    }
-
-    @PostMapping("/amz/product-performance")
-    public Object syncAmzProductPerformance() throws Exception {
-        return amzProductPerformanceService.syncAll();
     }
 
     @PostMapping("/amz/refresh-snapshot")
@@ -111,9 +104,34 @@ public class LingxingDebugController {
         return platformOrderService.testFetchOne(startDate, endDate);
     }
 
-    /** 调试：调用领星 asinList API 并返回原始响应，用于排查不同 SID 的数据差异 */
-    @GetMapping("/amz-perf-debug")
-    public Object debugAmzPerf(@RequestParam String sid) throws Exception {
-        return amzProductPerformanceService.debugCallApi(sid);
+    /** 调试：通用 POST 到领星 API，body 可传 _endpoint 覆盖网关地址 */
+    @PostMapping("/raw")
+    public Object rawPost(@RequestBody Map<String, Object> body,
+                          @RequestParam(defaultValue = "") String path) throws Exception {
+        String token = authService.getAccessToken();
+        String endpoint = body.containsKey("_endpoint")
+            ? String.valueOf(body.remove("_endpoint"))
+            : "http://8.137.177.25/lingxing-proxy";
+
+        Map<String, Object> qp = new LinkedHashMap<>();
+        qp.put("timestamp", String.valueOf(System.currentTimeMillis() / 1000));
+        qp.put("access_token", token);
+        qp.put("app_key", "ak_DBmvLSyHfhc5H");
+
+        Map<String, Object> sm = new LinkedHashMap<>(qp);
+        sm.putAll(body);
+        qp.put("sign", com.asinking.com.openapi.sdk.sign.ApiSign.sign(sm, "8VSwwqXgu/RtUvslYIacHQ=="));
+
+        com.asinking.com.openapi.sdk.core.HttpRequest<Object> req =
+            com.asinking.com.openapi.sdk.core.HttpRequest.builder(Object.class)
+                .method(com.asinking.com.openapi.sdk.core.HttpMethod.POST)
+                .endpoint(endpoint).path(path)
+                .queryParams(qp)
+                .json(com.alibaba.fastjson2.JSON.toJSONString(body))
+                .config(new com.asinking.com.openapi.sdk.core.Config()
+                        .withConnectionTimeout(60000).withReadTimeout(120000))
+                .build();
+        return com.asinking.com.openapi.sdk.okhttp.HttpExecutor.create().execute(req).readEntity(Object.class);
     }
+
 }

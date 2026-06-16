@@ -15,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,8 +24,8 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
 
     private static final Logger LOG = LoggerFactory.getLogger(AmzRestockSummaryService.class);
     private static final String API_PATH = "erp/sc/routing/restocking/analysis/getSummaryList";
-    private static final int PAGE_SIZE = 50;          // 接口上限50
-    private static final int SID_BATCH_SIZE = 20;     // 每批传20个SID
+    private static final int PAGE_SIZE = 50;
+    private static final int SID_BATCH_SIZE = 20;
 
     private final LingxingProperties props;
     private final LingxingAuthService auth;
@@ -40,10 +40,15 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
         List<String> sids = shopService.getSidsByPlatform(10001);
         if (sids.isEmpty()) { LOG.warn("[amz-restock] 无Amazon店铺"); return 0; }
 
-        // 清空表全量重建
-        baseMapper.delete(null);
+        // 加载已有记录索引 (key = hash_id)
+        Map<String, Long> existingIds = new LinkedHashMap<>();
+        for (AmzRestockSummaryEntity e : baseMapper.selectList(null)) {
+            if (e.getHashId() != null && !e.getHashId().isEmpty()) {
+                existingIds.put(e.getHashId(), e.getId());
+            }
+        }
+
         int total = 0;
-        List<AmzRestockSummaryEntity> batch = new ArrayList<>();
 
         for (int i = 0; i < sids.size(); i += SID_BATCH_SIZE) {
             List<String> sidBatch = sids.subList(i, Math.min(i + SID_BATCH_SIZE, sids.size()));
@@ -59,25 +64,31 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
                 }
                 if (list.isEmpty()) break;
 
-                batch.addAll(list);
-                if (batch.size() >= 1000) {
-                    this.saveBatch(batch);
-                    total += batch.size(); batch.clear();
+                // upsert by hash_id：分开 INSERT / UPDATE（saveBatch 才能回填自增ID）
+                List<AmzRestockSummaryEntity> inserts = new ArrayList<>();
+                List<AmzRestockSummaryEntity> updates = new ArrayList<>();
+                for (AmzRestockSummaryEntity e : list) {
+                    Long existId = existingIds.get(e.getHashId());
+                    if (existId != null) { e.setId(existId); updates.add(e); }
+                    else { inserts.add(e); }
+                }
+                if (!inserts.isEmpty()) {
+                    this.saveBatch(inserts);
+                    inserts.forEach(e -> existingIds.put(e.getHashId(), e.getId()));
+                    total += inserts.size();
+                }
+                if (!updates.isEmpty()) {
+                    this.updateBatchById(updates);
+                    total += updates.size();
                 }
                 if (list.size() < PAGE_SIZE) break;
                 offset += PAGE_SIZE;
             }
-            // 令牌桶=1，批次间休息2s
             if (i + SID_BATCH_SIZE < sids.size()) {
                 try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
             }
         }
-        if (!batch.isEmpty()) {
-            this.saveBatch(batch);
-            total += batch.size();
-        }
-
-        LOG.info("[amz-restock] sync done: insert={}", total);
+        LOG.info("[amz-restock] sync done: upsert={}", total);
         return total;
     }
 
@@ -90,29 +101,49 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
 
         List<AmzRestockSummaryEntity> result = new ArrayList<>();
         for (Map<String, Object> item : dataList) {
-            Map<String, Object> basic = getMap(item, "basic_info");
-            if (basic == null) continue;
-
-            // 只取 node_type=3(非共享库存) 或 node_type=4(汇总行)，filter掉父子行避免重复
-            Integer nodeType = getIntObj(basic, "node_type");
-            if (nodeType == null || nodeType == 1 || nodeType == 2) continue;
-
-            Integer sid = getIntObj(basic, "sid");
-            String msku = firstMsku(basic);
-            if (sid == null || msku == null || msku.isEmpty()) continue;
-
-            Map<String, Object> qty = getMap(item, "amazon_quantity_info");
-            int fbaSellable = qty != null ? getInt(qty, "amazon_quantity_valid") : 0;
-            int fbaInbound = qty != null ? getInt(qty, "amazon_quantity_shipping") : 0;
-
-            AmzRestockSummaryEntity e = new AmzRestockSummaryEntity();
-            e.setSid(sid);
-            e.setMsku(msku);
-            e.setFbaSellable(fbaSellable);
-            e.setFbaInbound(fbaInbound);
-            result.add(e);
+            addIfValid(result, item);
+            // 遍历子项 item_list
+            List<Map<String, Object>> children = getList(item, "item_list");
+            if (children != null) {
+                for (Map<String, Object> child : children) {
+                    addIfValid(result, child);
+                }
+            }
         }
         return result;
+    }
+
+    private void addIfValid(List<AmzRestockSummaryEntity> result, Map<String, Object> item) {
+        Map<String, Object> basic = getMap(item, "basic_info");
+        if (basic == null) return;
+
+        String hashId = getStr(basic, "hash_id");
+        if (hashId.isEmpty()) return;
+
+        Integer sid = getIntObj(basic, "sid");
+        String msku = firstMsku(basic);
+        if (sid == null || msku == null || msku.isEmpty()) return;
+
+        Map<String, Object> qty = getMap(item, "amazon_quantity_info");
+        Map<String, Object> sales = getMap(item, "sales_info");
+
+        AmzRestockSummaryEntity e = new AmzRestockSummaryEntity();
+        e.setHashId(hashId);
+        e.setNodeType(getIntObj(basic, "node_type"));
+        e.setSid(sid);
+        e.setMsku(msku);
+        e.setSyncTime(getStr(basic, "sync_time"));
+        e.setFbaSellable(qty != null ? getInt(qty, "amazon_quantity_valid") : 0);
+        e.setFbaInbound(qty != null ? getInt(qty, "amazon_quantity_shipping") : 0);
+        e.setFbaReserved(qty != null ? getInt(qty, "afn_reserved_quantity") : 0);
+        e.setSales7d(sales != null ? getInt(sales, "sales_total_7") : 0);
+        e.setSales14d(sales != null ? getInt(sales, "sales_total_14") : 0);
+        e.setSales30d(sales != null ? getInt(sales, "sales_total_30") : 0);
+        e.setSales60d(sales != null ? getInt(sales, "sales_total_60") : 0);
+        e.setAvgSales14d(sales != null ? getBd(sales, "sales_avg_14") : null);
+        e.setAvgSales30d(sales != null ? getBd(sales, "sales_avg_30") : null);
+        e.setAvgSales60d(sales != null ? getBd(sales, "sales_avg_60") : null);
+        result.add(e);
     }
 
     @SuppressWarnings("unchecked")
@@ -122,10 +153,10 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
             List<Map<String, Object>> list = (List<Map<String, Object>>) listObj;
             if (!list.isEmpty()) {
                 Object msku = list.get(0).get("msku");
-                return msku != null ? String.valueOf(msku) : null;
+                return msku != null ? String.valueOf(msku) : "";
             }
         }
-        return null;
+        return "";
     }
 
     private Object callApi(List<String> sids, int offset, int length) throws Exception {
@@ -135,10 +166,9 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
         qp.put("access_token", token); qp.put("app_key", props.getAppId());
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("data_type", 2);  // msku维度
+        body.put("data_type", 2);
         body.put("offset", offset);
         body.put("length", length);
-        // sid_list: 签名前JSON串，签名后还原数组
         body.put("sid_list", JSON.toJSONString(sids));
 
         Map<String, Object> sm = new LinkedHashMap<>(qp); sm.putAll(body);
@@ -157,8 +187,12 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
     }
 
     // ---- helpers ----
+    private String getStr(Map<String, Object> m, String k) { Object v = m.get(k); return v != null ? String.valueOf(v) : ""; }
     private int getInt(Map<String, Object> m, String k) { Object v = m.get(k); if (v instanceof Number) return ((Number)v).intValue(); if (v != null) try { return Integer.parseInt(v.toString()); } catch (Exception e) {} return 0; }
+    private BigDecimal getBd(Map<String, Object> m, String k) { Object v = m.get(k); if (v == null) return null; if (v instanceof Number) return BigDecimal.valueOf(((Number)v).doubleValue()); try { return new BigDecimal(v.toString()); } catch (Exception e) { return null; } }
     private Integer getIntObj(Map<String, Object> m, String k) { Object v = m.get(k); if (v instanceof Number) return ((Number)v).intValue(); if (v != null) try { return Integer.parseInt(v.toString()); } catch (Exception e) {} return null; }
     @SuppressWarnings("unchecked")
     private Map<String, Object> getMap(Map<String, Object> m, String k) { Object v = m.get(k); return v instanceof Map ? (Map<String, Object>) v : null; }
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> getList(Map<String, Object> m, String k) { Object v = m.get(k); return v instanceof List ? (List<Map<String, Object>>) v : null; }
 }
