@@ -54,12 +54,14 @@ public class AmzInventoryOverviewEntity {
     private BigDecimal salesSpeed30d;
     @JsonProperty("speed60")
     private BigDecimal salesSpeed60d;
-    private Integer safetyStock;
+    private BigDecimal safetyStock;
     @JsonProperty("avgMonthly")
-    private Integer avgMonthlySales;
-    private Integer replenishQty;
+    private BigDecimal avgMonthlySales;
+    private BigDecimal replenishQty;
+    @JsonProperty("restockDays")
+    private BigDecimal restockDays;
     @JsonProperty("shipment")
-    private Integer shipQty;
+    private BigDecimal shipQty;
     @TableField(value = "updated_at", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime updatedAt;
 }

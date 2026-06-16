@@ -202,12 +202,7 @@ const columns = [
   { title: '平均月销量', key: 'avgMonthly', width: 110 },
   { title: '补货量', key: 'replenishQty', width: 90 },
   { title: '发货量', key: 'shipment', width: 90 },
-  { title: '补货时间(天)', key: 'restockDays', width: 120, render: (row) => {
-      const w = (Number(row.speed14)||0)*0.5 + (Number(row.speed30)||0)*0.4 + (Number(row.speed60)||0)*0.1
-      if (w <= 0) return ''
-      const days = Math.round(((Number(row.totalStock)||0) - (Number(row.replenishQty)||0)) / w)
-      return String(Math.max(days, 0))
-    } },
+  { title: '补货时间(天)', key: 'restockDays', width: 120 },
   { title: '负责人', key: 'principalName', width: 100, ellipsis: { tooltip: true } },
 ].map(c => ({ ...c, resizable: false, minWidth: 60 }))
 

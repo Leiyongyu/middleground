@@ -9,7 +9,7 @@ import org.apache.ibatis.annotations.Mapper;
 public interface AmzInventoryOverviewMapper extends BaseMapper<AmzInventoryOverviewEntity> {
 
     @Insert("INSERT INTO amz_inventory_overview (sid, seller_sku, warehouse_sku, warehouse_name, asin, principal_name, store, product_category, last_star, review_num, ad_rate, profit_rate30d, refund_rate90d, " +
-            "  purchased_qty, domestic_stock, pending_ship, fba_stock, fba_inbound, total_inventory, sales7d, sales14d, sales30d, sales60d, sales_speed14d, sales_speed30d, sales_speed60d, avg_monthly_sales, safety_stock, ship_qty, replenish_qty) " +
+            "  purchased_qty, domestic_stock, pending_ship, fba_stock, fba_inbound, total_inventory, sales7d, sales14d, sales30d, sales60d, sales_speed14d, sales_speed30d, sales_speed60d, avg_monthly_sales, safety_stock, ship_qty, replenish_qty, restock_days) " +
             "SELECT pl.sid, pl.seller_sku, " +
             "  ANY_VALUE(wd.sku), " +
             "  ANY_VALUE(wh.name), " +
@@ -35,10 +35,11 @@ public interface AmzInventoryOverviewMapper extends BaseMapper<AmzInventoryOverv
             "  MAX(rs.avg_sales_14d), " +
             "  MAX(rs.avg_sales_30d), " +
             "  MAX(rs.avg_sales_60d), " +
-            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 30, 0), " +
-            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 90, 0), " +
-            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 90, 0) - (COALESCE(MAX(rs.fba_sellable),0) + COALESCE(MAX(rs.fba_inbound),0)), " +
-            "  GREATEST(ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 120, 0) - COALESCE(MAX(wd.product_valid_num),0) - COALESCE(MAX(wd.quantity_receive),0) - (COALESCE(MAX(rs.fba_sellable),0) + COALESCE(MAX(rs.fba_inbound),0)) - COALESCE(MAX(wd.product_lock_num),0), 0) " +
+            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 30, 2), " +
+            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 90, 2), " +
+            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 90, 2) - (COALESCE(MAX(rs.fba_sellable),0) + COALESCE(MAX(rs.fba_inbound),0)), " +
+            "  ROUND((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 120, 2) - COALESCE(MAX(wd.product_valid_num),0) - COALESCE(MAX(wd.quantity_receive),0) - (COALESCE(MAX(rs.fba_sellable),0) + COALESCE(MAX(rs.fba_inbound),0)) - COALESCE(MAX(wd.product_lock_num),0), " +
+            "  ROUND(((COALESCE(MAX(rs.fba_sellable),0) + COALESCE(MAX(rs.fba_inbound),0)) - ((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1) * 120 - COALESCE(MAX(wd.product_valid_num),0) - COALESCE(MAX(wd.quantity_receive),0) - (COALESCE(MAX(rs.fba_sellable),0) + COALESCE(MAX(rs.fba_inbound),0)) - COALESCE(MAX(wd.product_lock_num),0))) / NULLIF((COALESCE(MAX(rs.avg_sales_14d),0)*0.5 + COALESCE(MAX(rs.avg_sales_30d),0)*0.4 + COALESCE(MAX(rs.avg_sales_60d),0)*0.1), 0), 2) " +
             "FROM amz_warehouse_inventory_detail wd " +
             "LEFT JOIN amz_product_listing pl ON pl.local_sku = wd.sku " +
             "LEFT JOIN shop_list sl ON sl.sid = pl.sid AND sl.platform_code = '10001' " +

@@ -35,6 +35,12 @@ const platformOptions = computed(() =>
   uiStore.platformOptions.map((platform) => ({ label: platform, value: platform }))
 )
 
+// 根据当前路由自动同步平台选择器
+watch(() => route.path, (path) => {
+  if (path.startsWith('/amz')) uiStore.setPlatform('亚马逊')
+  else if (path === '/dashboard' || path === '/daily-price-tracking' || path === '/purchases') uiStore.setPlatform('eBay')
+}, { immediate: true })
+
 const activeKey = computed(() => route.path)
 
 // 当前路径对应的父菜单 key，用于切换路由时自动展开对应分组
