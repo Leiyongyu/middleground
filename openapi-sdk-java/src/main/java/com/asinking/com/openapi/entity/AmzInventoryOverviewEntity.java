@@ -27,6 +27,7 @@ public class AmzInventoryOverviewEntity {
     private BigDecimal profitRate30d;
     @JsonProperty("refundRate90")
     private BigDecimal refundRate90d;
+    @JsonProperty("category")
     private String productCategory;
     @JsonProperty("purchased")
     private Integer purchasedQty;
@@ -54,8 +55,10 @@ public class AmzInventoryOverviewEntity {
     @JsonProperty("speed60")
     private BigDecimal salesSpeed60d;
     private Integer safetyStock;
+    @JsonProperty("avgMonthly")
     private Integer avgMonthlySales;
     private Integer replenishQty;
+    @JsonProperty("shipment")
     private Integer shipQty;
     @TableField(value = "updated_at", insertStrategy = FieldStrategy.NEVER, updateStrategy = FieldStrategy.NEVER)
     private LocalDateTime updatedAt;

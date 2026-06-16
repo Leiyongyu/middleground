@@ -1,44 +1,21 @@
 <script setup>
-import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import {
   NButton, NCard, NCheckbox, NDataTable, NDrawer, NDrawerContent,
   NDropdown, NInput, NPopover, NSpace, NTag, useMessage,
 } from 'naive-ui'
-import { fetchAmzInventory } from '@/api/amzInventory'
+import { fetchAmzInventory, searchAmzInventory, fetchAmzDistinctValues, saveAmzCategory } from '@/api/amzInventory'
 import { apiPost } from '@/api/request'
+import { useColumnConfig } from '@/composables/useColumnConfig'
 
 const message = useMessage()
 
 const loading = ref(false)
 const rows = ref([])
 const totalRecords = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(100)
+const query = reactive({ page: 1, size: 100 })
 
-const pagination = computed(() => ({
-  page: currentPage.value,
-  pageSize: pageSize.value,
-  itemCount: totalRecords.value,
-  showSizePicker: true,
-  pageSizes: [20, 50, 100, 200],
-  onUpdatePage: (p) => { currentPage.value = p; loadData() },
-  onUpdatePageSize: (s) => { pageSize.value = s; currentPage.value = 1; loadData() },
-}))
-
-async function loadData() {
-  loading.value = true
-  try {
-    const res = await fetchAmzInventory({ page: currentPage.value, size: pageSize.value })
-    rows.value = res?.records || []
-    totalRecords.value = res?.total || 0
-  } catch (e) {
-    message.error('加载Amazon补货数据失败')
-  } finally { loading.value = false }
-}
-
-onMounted(() => loadData())
-
-// ===== 列排序 =====
+// ===== 服务端排序 =====
 const sortField = ref('')
 const sortOrder = ref('')
 const NUMERIC_FIELDS = new Set([
@@ -47,6 +24,24 @@ const NUMERIC_FIELDS = new Set([
   'sales7','sales14','sales30','sales60','speed14','speed30','speed60',
   'safetyStock','avgMonthly','replenishQty','shipment',
 ])
+
+async function loadData() {
+  loading.value = true
+  try {
+    const body = { page: query.page, size: query.size }
+    if (sortField.value) { body.sortField = sortField.value; body.sortOrder = sortOrder.value }
+    if (activeFilters.value.length) {
+      body.filters = activeFilters.value.map(f => ({ field: f.field, value: f.value }))
+    }
+    const res = await searchAmzInventory(body)
+    rows.value = res?.records || []
+    totalRecords.value = res?.total || 0
+  } catch (e) {
+    message.error('加载Amazon补货数据失败')
+  } finally { loading.value = false }
+}
+
+onMounted(() => { loadData(); initColConfig('amz-replenishment') })
 
 // ===== 列筛选 =====
 const filterField = ref('')
@@ -60,6 +55,9 @@ const filterX = ref(0)
 const filterY = ref(0)
 
 const distinctFilterValues = computed(() => {
+  return filterSearchResults.value.length ? filterSearchResults.value : localDistinctValues.value
+})
+const localDistinctValues = computed(() => {
   if (!filterField.value) return []
   const set = new Set()
   for (const row of rows.value) {
@@ -67,6 +65,19 @@ const distinctFilterValues = computed(() => {
     if (v != null && String(v).trim()) set.add(String(v).trim())
   }
   return [...set].sort().slice(0, 50)
+})
+// 服务端搜索回显
+const filterSearchResults = ref([])
+const filterRawRef = ref(null)
+let filterTimer = null
+watch(filterInputVal, (val) => {
+  if (!showFilter.value || !filterField.value) return
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(async () => {
+    if (!val || !val.trim()) { filterSearchResults.value = []; return }
+    try { filterSearchResults.value = await fetchAmzDistinctValues(filterField.value, val.trim()) || [] }
+    catch { filterSearchResults.value = [] }
+  }, 200)
 })
 
 function openFilter(key, e) {
@@ -93,13 +104,14 @@ function applyFilter() {
   const val = filterChecked.value.length ? filterChecked.value.join(',') : (rawVal && rawVal.trim() ? rawVal.trim() : '')
   activeFilters.value = activeFilters.value.filter(f => f.field !== field)
   if (val) activeFilters.value.push({ field, value: val, display: (columnMap[field] || field) + ':' + val })
-  showFilter.value = false
+  showFilter.value = false; query.page = 1; loadData()
 }
 function clearFilter() {
   activeFilters.value = activeFilters.value.filter(f => f.field !== filterField.value)
   filterInputVal.value = ''; filterNumOpVal.value = '>'; filterNumInputVal.value = ''; filterChecked.value = []; showFilter.value = false
+  query.page = 1; loadData()
 }
-function clearAllFilters() { activeFilters.value = []; filterField.value = '' }
+function clearAllFilters() { activeFilters.value = []; filterField.value = ''; query.page = 1; loadData() }
 
 function handleSortClick(key) {
   if (!NUMERIC_FIELDS.has(key)) return
@@ -107,19 +119,10 @@ function handleSortClick(key) {
   else if (sortOrder.value === 'desc') { sortOrder.value = 'asc' }
   else if (sortOrder.value === 'asc') { sortField.value = ''; sortOrder.value = '' }
   else { sortField.value = key; sortOrder.value = 'desc' }
+  query.page = 1; loadData()
 }
 
-const filteredRows = computed(() => {
-  let result = rows.value
-  if (sortField.value) {
-    const f = sortField.value; const asc = sortOrder.value === 'asc'
-    result = [...result].sort((a, b) => {
-      const va = Number(a?.[f]) || 0; const vb = Number(b?.[f]) || 0
-      return asc ? va - vb : vb - va
-    })
-  }
-  return result
-})
+const filteredRows = computed(() => rows.value)
 
 function renderFilterIcon(key) {
   const isActive = activeFilters.value.some(f => f.field === key)
@@ -164,7 +167,24 @@ const columns = [
   { title: '广告费率', key: 'adRate', width: 100, render: (row) => row.adRate != null ? row.adRate + '%' : '' },
   { title: '近30天利润率', key: 'profitRate30', width: 130, render: (row) => row.profitRate30 != null ? row.profitRate30 + '%' : '' },
   { title: '近90天退款率', key: 'refundRate90', width: 130, render: (row) => row.refundRate90 != null ? row.refundRate90 + '%' : '' },
-  { title: '产品分类', key: 'category', width: 110 },
+  { title: '产品分类', key: 'category', width: 130, render: (row) => {
+      // 用闭包变量暂存输入值
+      if (!row._catInput) row._catInput = row.category || ''
+      return h(NInput, {
+        size: 'tiny',
+        value: row._catInput,
+        placeholder: '输入分类',
+        style: { width: '100%' },
+        'onUpdate:value': (v) => { row._catInput = v },
+        onBlur: () => {
+          if ((row._catInput || '') !== (row.category || '')) {
+            row.category = row._catInput
+            saveAmzCategory(String(row.sid), row.sellerSku, row._catInput || '').catch(() => {})
+          }
+        },
+        onKeyup: (e) => { if (e.key === 'Enter') e.target?.blur() },
+      })
+    } },
   { title: '已采购数量', key: 'purchased', width: 110 },
   { title: '国内仓数量', key: 'domesticStock', width: 110 },
   { title: '待出库', key: 'lockNum', width: 80 },
@@ -182,6 +202,12 @@ const columns = [
   { title: '平均月销量', key: 'avgMonthly', width: 110 },
   { title: '补货量', key: 'replenishQty', width: 90 },
   { title: '发货量', key: 'shipment', width: 90 },
+  { title: '补货时间(天)', key: 'restockDays', width: 120, render: (row) => {
+      const w = (Number(row.speed14)||0)*0.5 + (Number(row.speed30)||0)*0.4 + (Number(row.speed60)||0)*0.1
+      if (w <= 0) return ''
+      const days = Math.round(((Number(row.totalStock)||0) - (Number(row.replenishQty)||0)) / w)
+      return String(Math.max(days, 0))
+    } },
   { title: '负责人', key: 'principalName', width: 100, ellipsis: { tooltip: true } },
 ].map(c => ({ ...c, resizable: false, minWidth: 60 }))
 
@@ -197,9 +223,13 @@ columns.forEach(c => {
 
 const scrollX = columns.reduce((s, c) => s + (Number(c?.width) || 100), 0)
 
-// ===== 列配置 =====
-const showDrawer = ref(false)
-const visibleKeys = ref(columns.filter(c => c.key).map(c => c.key))
+// ===== 列配置（对齐 eBay 补货页，使用 composable 持久化） =====
+const {
+  showDrawer, visibleKeys, editingKeys, leftCols, selCols, isAllChecked,
+  init: initColConfig, openDrawer, apply: applyColConfig,
+  toggleAll, toggleColumn, onDragStart, onDragOver, onDrop, onDragEnd,
+} = useColumnConfig(['sellerSku', 'store'], columnMap)
+
 const colByKey = columns.reduce((m, c) => { if (c.key) m[c.key] = c; return m }, {})
 const selectionColumn = columns[0]
 const visibleColumns = computed(() => {
@@ -207,19 +237,6 @@ const visibleColumns = computed(() => {
   return [selectionColumn, ...ordered]
 })
 const visibleScrollX = computed(() => visibleColumns.value.reduce((s, c) => s + (Number(c?.width) || 100), 0))
-
-const leftCols = computed(() =>
-  columns.filter(c => c.key).map(c => ({ key: c.key, title: columnMap[c.key], checked: visibleKeys.value.includes(c.key) }))
-)
-const isAllChecked = computed(() => leftCols.value.every(c => c.checked))
-function toggleAll() {
-  if (isAllChecked.value) visibleKeys.value = ['sellerSku', 'warehouseSku', 'store']
-  else visibleKeys.value = columns.filter(c => c.key).map(c => c.key)
-}
-function toggleColumn(key) {
-  const idx = visibleKeys.value.indexOf(key)
-  if (idx >= 0) visibleKeys.value.splice(idx, 1); else visibleKeys.value.push(key)
-}
 
 onMounted(() => document.addEventListener('click', onDocClick))
 onUnmounted(() => document.removeEventListener('click', onDocClick))
@@ -236,6 +253,44 @@ async function handleRefresh() {
   } finally { loading.value = false }
 }
 const checkedRowKeys = ref([])
+const importExportLoading = ref(false)
+
+function handleDropdownSelect(key) {
+  if (key === 'exportExcel') handleExportExcel()
+}
+
+async function handleExportExcel() {
+  if (importExportLoading.value) return
+  importExportLoading.value = true
+  try {
+    const colKeys = visibleKeys.value.filter(k => k !== 'selection')
+    const colTitles = colKeys.map(k => columnMap[k] || k)
+    const body = { colKeys, colTitles }
+    if (activeFilters.value.length) {
+      body.filters = activeFilters.value.map(f => ({ field: f.field, value: f.value }))
+    }
+    if (checkedRowKeys.value.length) {
+      body.rowKeys = checkedRowKeys.value
+    }
+    const token = JSON.parse(localStorage.getItem('inventory-auth-session') || '{}').token || ''
+    const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
+    const resp = await fetch(base + '/api/amz/inventory/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    if (!resp.ok) throw new Error('导出失败')
+    const blob = await resp.blob()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'Amazon补货_' + new Date().toISOString().slice(0,10) + '.xlsx'
+    a.click()
+    URL.revokeObjectURL(a.href)
+    message.success('导出成功')
+  } catch (e) {
+    message.error('导出失败')
+  } finally { importExportLoading.value = false }
+}
 </script>
 
 <template>
@@ -251,10 +306,10 @@ const checkedRowKeys = ref([])
               </template>
               刷新
             </NButton>
-            <NDropdown trigger="click" :options="[{ label: '导出 Excel', key: 'export' }]">
-              <NButton size="small" type="info">导入导出</NButton>
+            <NDropdown trigger="click" :options="[{ label: '导出 Excel', key: 'exportExcel' }]" @select="handleDropdownSelect">
+              <NButton size="small" type="info" :loading="importExportLoading">导入导出</NButton>
             </NDropdown>
-            <NButton size="small" round @click="showDrawer = true" title="列设置">
+            <NButton size="small" round @click="openDrawer" title="列设置">
               <template #icon>
                 <svg viewBox="0 0 1024 1024" width="14" height="14"><path fill="currentColor" d="M512 938.666667a32.032 32.032 0 0 1-15.648-4.085334l-352-197.333333A32 32 0 0 1 128 709.333333v-394.666666a32 32 0 0 1 16.352-27.914667l352-197.333333a32 32 0 0 1 31.296 0l352 197.333333A32 32 0 0 1 896 314.666667v394.666666a32 32 0 0 1-16.352 27.914667l-352 197.333333A32 32 0 0 1 512 938.666667zM192 690.581333L512 869.973333l320-179.392V333.408L512 154.016 192 333.408v357.173333zM512 682.666667c-94.101333 0-170.666667-76.565333-170.666667-170.666667S417.898667 341.333333 512 341.333333s170.666667 76.565333 170.666667 170.666667-76.565333 170.666667-170.666667 170.666667z m0-277.333334c-58.816 0-106.666667 47.850667-106.666667 106.666667s47.850667 106.666667 106.666667 106.666667 106.666667-47.850667 106.666667-106.666667S570.816 405.333333 512 405.333333z"/></svg>
               </template>
@@ -262,17 +317,30 @@ const checkedRowKeys = ref([])
           </NSpace>
         </template>
 
+        <div v-if="activeFilters.length" class="filter-tags" style="padding: 0 16px 8px;">
+          <NTag v-for="f in activeFilters" :key="f.field" closable size="small" type="info" @close="activeFilters = activeFilters.filter(af => af.field !== f.field); query.page = 1; loadData()">{{ f.display }}</NTag>
+          <NButton size="tiny" text type="primary" @click="clearAllFilters()">清除全部</NButton>
+        </div>
+
         <NDataTable
-          v-if="totalRecords > 0"
+          remote
           :loading="loading"
           :columns="visibleColumns"
           :data="filteredRows"
           :bordered="false"
           :scroll-x="visibleScrollX"
           :max-height="680"
-          :row-key="(row) => `${row.sellerSku || ''}|${row.warehouseSku || ''}`"
+          :row-key="(row) => `${row.sid || ''}|${row.sellerSku || ''}|${row.warehouseSku || ''}`"
           v-model:checked-row-keys="checkedRowKeys"
-          :pagination="pagination"
+          :pagination="{
+            page: query.page,
+            pageSize: query.size,
+            itemCount: totalRecords,
+            showSizePicker: true,
+            pageSizes: [20, 50, 100, 200],
+            onUpdatePage: (p) => { query.page = p; loadData() },
+            onUpdatePageSize: (s) => { query.size = s; query.page = 1; loadData() },
+          }"
           striped
         />
       </NCard>
@@ -285,21 +353,28 @@ const checkedRowKeys = ref([])
           <div class="col-config-left">
             <NSpace vertical size="small">
               <NCheckbox :checked="isAllChecked" @update:checked="toggleAll">全选</NCheckbox>
-              <NCheckbox v-for="c in leftCols" :key="c.key" :checked="c.checked" @update:checked="toggleColumn(c.key)">{{ c.title }}</NCheckbox>
+              <NCheckbox v-for="c in leftCols" :key="c.key" :checked="c.checked" :disabled="c.disabled" @update:checked="toggleColumn(c.key)">{{ c.title }}</NCheckbox>
             </NSpace>
           </div>
           <div class="col-config-right">
             <div class="col-config-right-title">已选字段</div>
-            <div v-for="c in visibleColumns.filter(x => x.key)" :key="c.key" class="col-config-item">
-              <span class="col-config-drag">⠿</span>
-              <span>{{ columnMap[c.key] }}</span>
+            <div v-for="(c, idx) in selCols" :key="c.key"
+              class="col-config-item"
+              :class="{ 'col-config-item-fixed': c.fixed }"
+              :draggable="!c.fixed"
+              @dragstart="onDragStart(idx)"
+              @dragover="onDragOver"
+              @drop="onDrop(idx)"
+              @dragend="onDragEnd">
+              <span class="col-config-drag" :style="{ visibility: c.fixed ? 'hidden' : 'visible' }">⠿</span>
+              <span>{{ c.title }}{{ c.fixed ? ' (固定)' : '' }}</span>
             </div>
           </div>
         </div>
         <template #footer>
           <NSpace justify="end">
             <NButton @click="showDrawer = false">取消</NButton>
-            <NButton type="primary" @click="showDrawer = false">确定</NButton>
+            <NButton type="primary" @click="applyColConfig('amz-replenishment', message)">确定</NButton>
           </NSpace>
         </template>
       </NDrawerContent>
@@ -309,6 +384,7 @@ const checkedRowKeys = ref([])
     <Teleport to="body">
       <div v-if="showFilter" class="filter-popover" :style="{ left: filterX + 'px', top: filterY + 'px' }" @click.stop>
         <div class="filter-popover-inner">
+          <div style="font-size:12px;color:#999;margin-bottom:6px">筛选字段：{{ columnMap[filterField] || filterField }}</div>
           <div v-if="!NUMERIC_FIELDS.has(filterField)">
             <input :value="filterInputVal" class="filter-raw-input" placeholder="搜索关键词..." @input="filterInputVal = $event.target.value" @keyup.enter="applyFilter()" />
           </div>
@@ -318,8 +394,8 @@ const checkedRowKeys = ref([])
             </select>
             <input :value="filterNumInputVal" class="filter-raw-input" style="flex:1" type="number" placeholder="数值" @input="filterNumInputVal = $event.target.value" @keyup.enter="applyFilter()" />
           </div>
-          <div v-if="!filterInputVal && distinctFilterValues.length" class="filter-distinct-list">
-            <div class="filter-distinct-title">当前页可选值</div>
+          <div v-if="distinctFilterValues.length" class="filter-distinct-list">
+            <div class="filter-distinct-title">{{ filterSearchResults.length ? '搜索结果' : '当前页可选值' }}</div>
             <div v-for="v in distinctFilterValues" :key="v" class="filter-distinct-item">
               <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
               <span @click="toggleFilterCheck(v)" class="filter-item-label">{{ v }}</span>
@@ -350,7 +426,9 @@ const checkedRowKeys = ref([])
 .col-config-left { width: 160px; flex-shrink: 0; padding: 8px; border-right: 1px solid #eee; max-height: 400px; overflow-y: auto; }
 .col-config-right { flex: 1; padding: 8px; max-height: 400px; overflow-y: auto; }
 .col-config-right-title { font-size: 12px; color: #999; margin-bottom: 8px; }
-.col-config-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 4px; background: #fafafa; border-radius: 4px; font-size: 13px; border: 1px solid #eee; }
+.col-config-item { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 4px; background: #fafafa; border-radius: 4px; font-size: 13px; border: 1px solid #eee; cursor: grab; }
+.col-config-item:hover { border-color: #1677ff; }
+.col-config-item-fixed { background: #f5f5f5; color: #999; cursor: default; }
 .col-config-drag { color: #bbb; font-size: 14px; user-select: none; }
 
 .filter-popover { position: fixed; z-index: 2000; }
