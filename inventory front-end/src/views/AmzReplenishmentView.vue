@@ -145,8 +145,8 @@ function renderSortIcon(key) {
 // ===== 列定义 =====
 const columns = [
   { type: 'selection', multiple: true, width: 40, fixed: 'left' },
-  { title: 'MSKU', key: 'sellerSku', width: 150, fixed: 'left', ellipsis: { tooltip: true } },
-  { title: '店铺', key: 'store', width: 160, fixed: 'left' },
+  { title: 'MSKU', key: 'sellerSku', width: 150, ellipsis: { tooltip: true } },
+  { title: '店铺', key: 'store', width: 160 },
   { title: '仓库SKU', key: 'warehouseSku', width: 130, ellipsis: { tooltip: true } },
   { title: '仓库', key: 'warehouseName', width: 130, ellipsis: { tooltip: true } },
   { title: 'ASIN', key: 'asin', width: 130, ellipsis: { tooltip: true } },
@@ -224,7 +224,7 @@ const {
   showDrawer, visibleKeys, editingKeys, leftCols, selCols, isAllChecked,
   init: initColConfig, openDrawer, apply: applyColConfig,
   toggleAll, toggleColumn, onDragStart, onDragOver, onDrop, onDragEnd,
-} = useColumnConfig(['sellerSku', 'store'], columnMap)
+} = useColumnConfig([], columnMap)
 
 const colByKey = columns.reduce((m, c) => { if (c.key) m[c.key] = c; return m }, {})
 const selectionColumn = columns[0]

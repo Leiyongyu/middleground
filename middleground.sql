@@ -11,7 +11,7 @@
  Target Server Version : 90700 (9.7.0)
  File Encoding         : 65001
 
- Date: 16/06/2026 16:04:01
+ Date: 17/06/2026 17:29:07
 */
 
 SET NAMES utf8mb4;
@@ -23,9 +23,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `amz_inventory_overview`;
 CREATE TABLE `amz_inventory_overview`  (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `sid` int NOT NULL DEFAULT 0 COMMENT '店铺ID',
-  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Seller SKU',
-  `warehouse_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '仓库SKU',
+  `sid` int NULL DEFAULT NULL,
+  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT NULL,
+  `warehouse_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `warehouse_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '仓库名称',
   `asin` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT 'ASIN',
   `principal_name` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '负责人',
@@ -49,14 +49,14 @@ CREATE TABLE `amz_inventory_overview`  (
   `sales_speed14d` decimal(10, 2) NULL DEFAULT NULL,
   `sales_speed30d` decimal(10, 2) NULL DEFAULT NULL,
   `sales_speed60d` decimal(10, 2) NULL DEFAULT NULL,
-  `safety_stock` int NULL DEFAULT 0 COMMENT '安全库存',
-  `avg_monthly_sales` int NULL DEFAULT 0 COMMENT '平均月销量',
-  `replenish_qty` int NULL DEFAULT 0 COMMENT '补货量',
-  `ship_qty` int NULL DEFAULT 0 COMMENT '发货量',
+  `safety_stock` decimal(10, 2) NULL DEFAULT NULL COMMENT '安全库存',
+  `avg_monthly_sales` decimal(10, 2) NULL DEFAULT NULL COMMENT '平均月销量',
+  `replenish_qty` decimal(10, 2) NULL DEFAULT NULL COMMENT '补货量',
+  `restock_days` decimal(10, 2) NULL DEFAULT NULL COMMENT '补货时间(天)',
+  `ship_qty` decimal(10, 2) NULL DEFAULT NULL COMMENT '发货量',
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1060239 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon补货数据预计算表' ROW_FORMAT = Dynamic;
+  PRIMARY KEY (`id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1672657 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon补货数据预计算表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for amz_order_profit
@@ -72,7 +72,21 @@ CREATE TABLE `amz_order_profit`  (
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 13280 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon订单利润表(MSKU维度)' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 91844 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon订单利润表(MSKU维度)' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for amz_product_category
+-- ----------------------------
+DROP TABLE IF EXISTS `amz_product_category`;
+CREATE TABLE `amz_product_category`  (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `sid` int NOT NULL COMMENT '店铺ID',
+  `seller_sku` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'MSKU',
+  `category` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '产品分类',
+  `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 7 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'AMZ产品分类(手动维护)' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for amz_product_listing
@@ -93,7 +107,7 @@ CREATE TABLE `amz_product_listing`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_sid_sku`(`sid` ASC, `seller_sku` ASC) USING BTREE,
   INDEX `idx_asin`(`asin` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 37794 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon商品Listing' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 274205 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'Amazon商品Listing' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for amz_restock_summary
@@ -119,7 +133,7 @@ CREATE TABLE `amz_restock_summary`  (
   `avg_sales_60d` decimal(10, 2) NULL DEFAULT NULL COMMENT '60日均销量',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_hash_id`(`hash_id` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 47729 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'amz补货建议表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 108873 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'amz补货建议表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for amz_warehouse_inventory_detail
@@ -130,13 +144,13 @@ CREATE TABLE `amz_warehouse_inventory_detail`  (
   `wid` int NOT NULL COMMENT '仓库ID',
   `seller_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL DEFAULT '' COMMENT '卖家ID',
   `sku` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SKU',
-  `product_valid_num` int NULL DEFAULT 0 COMMENT '可用库存',
   `quantity_receive` decimal(10, 2) NULL DEFAULT NULL COMMENT '待收数量',
+  `product_valid_num` int NULL DEFAULT 0 COMMENT '可用库存',
   `product_lock_num` int NULL DEFAULT 0 COMMENT '锁定库存',
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_wid_sku`(`wid` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2382 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'AMZ仓库库存明细' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 17434 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'AMZ仓库库存明细' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for brand_owner
@@ -192,7 +206,7 @@ CREATE TABLE `ebay_product_dedup`  (
   `lowest_upload_time` datetime NULL DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_site_sku`(`site` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 7458 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'ebay商品去重表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 7480 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'ebay商品去重表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for ebay_product_listing
@@ -239,7 +253,7 @@ CREATE TABLE `ebay_product_listing`  (
   INDEX `idx_platform`(`platform` ASC) USING BTREE,
   INDEX `idx_quantity`(`quantity` ASC) USING BTREE,
   INDEX `idx_msku_local_sku`(`msku` ASC, `local_sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 42139 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'eBay商品刊登信息表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 42725 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = 'eBay商品刊登信息表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for ebay_sales
@@ -277,7 +291,7 @@ CREATE TABLE `goodcang_grn_detail`  (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_receiving_code`(`receiving_code` ASC) USING BTREE,
   INDEX `idx_product_sku`(`product_sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 33839 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '谷仓入库单详情(中转明细)' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 62857 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '谷仓入库单详情(中转明细)' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for goodcang_grn_list
@@ -298,7 +312,7 @@ CREATE TABLE `goodcang_grn_list`  (
   UNIQUE INDEX `uk_receiving_code`(`receiving_code` ASC) USING BTREE,
   INDEX `idx_warehouse`(`warehouse_code` ASC) USING BTREE,
   INDEX `idx_create_at`(`create_at` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 107 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '谷仓入库单列表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 109 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '谷仓入库单列表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for goodcang_product_info
@@ -345,7 +359,7 @@ CREATE TABLE `goodcang_warehouse`  (
   UNIQUE INDEX `uk_wp_code`(`wp_code` ASC) USING BTREE,
   INDEX `idx_warehouse_code`(`warehouse_code` ASC) USING BTREE,
   INDEX `idx_country_code`(`country_code` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 28 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '谷仓仓库信息(物理仓级别)' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 46 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '谷仓仓库信息(物理仓级别)' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for inventory_overview
@@ -395,7 +409,7 @@ CREATE TABLE `inventory_overview`  (
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_site_sku`(`warehouse_names` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 46637 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '库存总览预计算表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 46801 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '库存总览预计算表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for operation_log
@@ -420,7 +434,7 @@ CREATE TABLE `operation_log`  (
   INDEX `idx_api_path`(`api_path` ASC) USING BTREE,
   INDEX `idx_operator`(`operator` ASC) USING BTREE,
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 69 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '拉取数据日志表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 119 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '拉取数据日志表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for profit_report
@@ -447,7 +461,7 @@ CREATE TABLE `profit_report`  (
   INDEX `idx_msku`(`msku` ASC) USING BTREE,
   INDEX `idx_store_name`(`store_name` ASC) USING BTREE,
   INDEX `idx_ship_time`(`ship_time` ASC) USING BTREE
-) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '利润报表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '利润报表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for purchase_order
@@ -484,7 +498,7 @@ CREATE TABLE `purchase_order`  (
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE,
   INDEX `idx_item_sku`(`item_sku` ASC) USING BTREE,
   INDEX `idx_create_time_status`(`create_time` ASC, `status_text` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 4763 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购单(全字段)' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 4817 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购单(全字段)' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for purchase_plan
@@ -539,7 +553,7 @@ CREATE TABLE `purchase_plan`  (
   INDEX `idx_create_time`(`create_time` ASC) USING BTREE,
   INDEX `idx_status_upload`(`status_text` ASC, `upload_time` ASC) USING BTREE,
   INDEX `idx_upload_time`(`upload_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2231 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购计划(全字段)' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 2235 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购计划(全字段)' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for purchase_plan_submit
@@ -571,7 +585,7 @@ CREATE TABLE `purchase_plan_submit`  (
   INDEX `idx_owner`(`creator_owner_name` ASC) USING BTREE,
   INDEX `idx_account`(`creator_account` ASC) USING BTREE,
   INDEX `idx_submit_time`(`submit_time` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购计划提交记录' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 4 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '采购计划提交记录' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for shop_list
@@ -645,7 +659,7 @@ CREATE TABLE `user_column_config`  (
   `update_time` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_user_page`(`user_account` ASC, `page_key` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户列配置表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 6 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '用户列配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for warehouse
@@ -712,7 +726,7 @@ CREATE TABLE `warehouse_inventory_detail`  (
   INDEX `idx_sku`(`sku` ASC) USING BTREE,
   INDEX `idx_wid`(`wid` ASC) USING BTREE,
   INDEX `idx_wid_sku`(`wid` ASC, `sku` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 2066377432036081711 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '仓库库存明细表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 2067063737095041084 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '仓库库存明细表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for warehouse_statement
@@ -744,6 +758,6 @@ CREATE TABLE `warehouse_statement`  (
   INDEX `idx_opt_time`(`opt_time` ASC) USING BTREE,
   INDEX `idx_type_opt_time`(`type` ASC, `opt_time` ASC) USING BTREE,
   INDEX `idx_sku_wid_type`(`sku` ASC, `wid` ASC, `type` ASC) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 830 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '仓库库存流水' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 874 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '仓库库存流水' ROW_FORMAT = DYNAMIC;
 
 SET FOREIGN_KEY_CHECKS = 1;
