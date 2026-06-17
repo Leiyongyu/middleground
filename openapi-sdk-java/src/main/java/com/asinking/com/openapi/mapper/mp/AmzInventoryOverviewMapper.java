@@ -47,7 +47,6 @@ public interface AmzInventoryOverviewMapper extends BaseMapper<AmzInventoryOverv
             "LEFT JOIN amz_order_profit op ON op.sid = pl.sid AND op.seller_sku = pl.seller_sku " +
             "LEFT JOIN amz_restock_summary rs ON rs.sid = pl.sid AND rs.msku = pl.seller_sku " +
             "LEFT JOIN warehouse wh ON wh.wid = wd.wid " +
-            "WHERE pl.principal_name IS NOT NULL AND pl.principal_name != '' " +
-            "GROUP BY pl.sid, pl.seller_sku")
+            "GROUP BY wd.id, pl.sid, pl.seller_sku")
     void insertByListing();
 }
