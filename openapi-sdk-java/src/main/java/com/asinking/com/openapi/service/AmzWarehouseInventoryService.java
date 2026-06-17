@@ -26,10 +26,8 @@ public class AmzWarehouseInventoryService extends ServiceImpl<AmzWarehouseInvent
     private static final int PAGE_SIZE = 800;
 
     // Amazon 仓库 wid 列表
-    private static final String AMZ_WIDS = "18664,18669,18672,18677,18678,18679,18680," +
-            "18698,18715,18718,18721,18724,18732,18736,18740,18744,18748,18752," +
-            "18814,18819,18825,18829,18833,18837,18841,18845,18867," +
-            "19561,19578,19579";
+    private static final String AMZ_WIDS = "18680";
+    //18677,18678,18679,18680,19561
 
     private final LingxingProperties props;
     private final LingxingAuthService auth;
@@ -39,36 +37,47 @@ public class AmzWarehouseInventoryService extends ServiceImpl<AmzWarehouseInvent
     }
 
     public int syncAll() throws Exception {
-        // 加载已有 key 用于去重
-        Set<String> existingKeys = new HashSet<>();
-        for (AmzWarehouseInventoryDetailEntity e : baseMapper.selectList(null)) {
-            existingKeys.add(e.getWid() + "|" + e.getSku());
-        }
-
+        // 清空全量重建
+        baseMapper.delete(null);
         int total = 0;
-        int offset = 0;
+        Set<String> seen = new HashSet<>();
+        // 逐个WID独立分页，保证数据完整
+        String[] wids = AMZ_WIDS.split(",");
+        for (String wid : wids) {
+            int widTotal = 0;
+            int offset = 0;
+            for (int guard = 0; guard < 500; guard++) {
+                Object resp = callApi(wid, offset, PAGE_SIZE, null);
+                ParseResult pr = parseWithTotal(resp);
+                if (pr.list.isEmpty()) break;
 
-        for (int guard = 0; guard < 500; guard++) {
-            Object resp = callApi(AMZ_WIDS, offset, PAGE_SIZE, null);
-            List<AmzWarehouseInventoryDetailEntity> list = parseResponse(resp);
-            if (list.isEmpty()) break;
-
-            // 去重：过滤已存在和本批次重复的
-            List<AmzWarehouseInventoryDetailEntity> fresh = new ArrayList<>();
-            for (AmzWarehouseInventoryDetailEntity e : list) {
-                if (existingKeys.add(e.getWid() + "|" + e.getSku())) {
-                    fresh.add(e);
+                List<AmzWarehouseInventoryDetailEntity> fresh = new ArrayList<>();
+                for (AmzWarehouseInventoryDetailEntity e : pr.list) {
+                    if (seen.add(e.getWid() + "|" + e.getSku())) {
+                        fresh.add(e);
+                    }
                 }
+                if (!fresh.isEmpty()) { this.saveBatch(fresh); total += fresh.size(); widTotal += fresh.size(); }
+                if (offset + PAGE_SIZE >= pr.total) break;
+                offset += PAGE_SIZE;
             }
-            if (!fresh.isEmpty()) {
-                this.saveBatch(fresh);
-                total += fresh.size();
-            }
-            if (list.size() < PAGE_SIZE) break;
-            offset += PAGE_SIZE;
+            LOG.info("[amz-inv] WID={} pulled={}", wid, widTotal);
         }
         LOG.info("[amz-inv] sync done: insert={}", total);
         return total;
+    }
+
+    private static class ParseResult {
+        List<AmzWarehouseInventoryDetailEntity> list = Collections.emptyList();
+        int total = 0;
+    }
+
+    private ParseResult parseWithTotal(Object remote) {
+        ParseResult r = new ParseResult();
+        Map<String, Object> root = JSON.parseObject(JSON.toJSONString(remote), new TypeReference<Map<String, Object>>() {});
+        r.total = root.get("total") != null ? ((Number) root.get("total")).intValue() : 0;
+        r.list = parseResponse(remote);
+        return r;
     }
 
     @SuppressWarnings("unchecked")
@@ -98,6 +107,10 @@ public class AmzWarehouseInventoryService extends ServiceImpl<AmzWarehouseInvent
         return result;
     }
 
+    public Object debugCallApi(String sku) throws Exception {
+        return callApi(AMZ_WIDS, 0, 10, sku);
+    }
+
     private Object callApi(String wid, int offset, int length, String sku) throws Exception {
         String token = auth.getAccessToken();
         Map<String, Object> qp = new LinkedHashMap<>();
@@ -109,6 +122,7 @@ public class AmzWarehouseInventoryService extends ServiceImpl<AmzWarehouseInvent
         body.put("wid", wid);
         body.put("offset", offset);
         body.put("length", length);
+        //body.put("is_sku_merge_show",0);
         if (sku != null && !sku.isEmpty()) body.put("sku", sku);
 
         Map<String, Object> sm = new LinkedHashMap<>(qp);

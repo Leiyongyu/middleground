@@ -44,6 +44,7 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
         baseMapper.delete(null);
 
         int total = 0;
+        Set<String> seen = new HashSet<>();
 
         for (int i = 0; i < sids.size(); i += SID_BATCH_SIZE) {
             List<String> sidBatch = sids.subList(i, Math.min(i + SID_BATCH_SIZE, sids.size()));
@@ -59,8 +60,11 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
                 }
                 if (list.isEmpty()) break;
 
-                this.saveBatch(list);
-                total += list.size();
+                List<AmzRestockSummaryEntity> fresh = new ArrayList<>();
+                for (AmzRestockSummaryEntity e : list) {
+                    if (seen.add(e.getHashId())) fresh.add(e);
+                }
+                if (!fresh.isEmpty()) { this.saveBatch(fresh); total += fresh.size(); }
                 if (list.size() < PAGE_SIZE) break;
                 offset += PAGE_SIZE;
             }

@@ -189,7 +189,7 @@ const columns = [
   { title: '已采购数量', key: 'purchased', width: 110 },
   { title: '国内仓数量', key: 'domesticStock', width: 110 },
   { title: '待出库', key: 'lockNum', width: 80 },
-  { title: 'FB在库', key: 'fbStock', width: 90 },
+  { title: 'FBA在库', key: 'fbStock', width: 90 },
   { title: 'FBA在途', key: 'fbaOnway', width: 90 },
   { title: '总库存', key: 'totalStock', width: 90 },
   { title: '7天销量', key: 'sales7', width: 90 },

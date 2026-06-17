@@ -2,6 +2,7 @@ package com.asinking.com.openapi.controller;
 
 import com.asinking.com.openapi.service.LingxingAuthService;
 import com.asinking.com.openapi.service.AmazonComputeService;
+import com.asinking.com.openapi.service.AmzWarehouseInventoryService;
 import com.asinking.com.openapi.service.LingxingAmazonService;
 import com.asinking.com.openapi.service.LingxingEbayService;
 import com.asinking.com.openapi.service.LingxingPlatformOrderService;
@@ -31,16 +32,19 @@ public class LingxingDebugController {
     private final LingxingPlatformOrderService platformOrderService;
     private final LingxingAmazonService amazonService;
     private final AmazonComputeService amazonComputeService;
+    private final AmzWarehouseInventoryService amzInvService;
 
     public LingxingDebugController(LingxingAuthService authService, LingxingShopService shopService,
                                    LingxingEbayService ebayService, LingxingPlatformOrderService platformOrderService,
-                                   LingxingAmazonService amazonService, AmazonComputeService amazonComputeService) {
+                                   LingxingAmazonService amazonService, AmazonComputeService amazonComputeService,
+                                   AmzWarehouseInventoryService amzInvService) {
         this.authService = authService;
         this.shopService = shopService;
         this.ebayService = ebayService;
         this.platformOrderService = platformOrderService;
         this.amazonService = amazonService;
         this.amazonComputeService = amazonComputeService;
+        this.amzInvService = amzInvService;
     }
 
     /**
@@ -111,6 +115,12 @@ public class LingxingDebugController {
                                   @RequestParam(defaultValue = "") String searchValue) throws Exception {
         List<String> sids = shopService.getSidsByPlatform(10001);
         return amazonService.testFetchListing(sids, searchField, searchValue);
+    }
+
+    /** 调试：测试 inventoryDetails API 搜索指定 SKU */
+    @GetMapping("/amz-inv-test")
+    public Object testAmzInventory(@RequestParam(defaultValue = "RNG-80008-0076") String sku) throws Exception {
+        return amzInvService.debugCallApi(sku);
     }
 
 }
