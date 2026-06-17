@@ -51,7 +51,6 @@ const parentKeyForRoute = computed(() => {
     '/amz-replenishment': 'operations',
     '/purchases': 'purchase-group',
     '/purchase-plan/create': 'purchase-group',
-    '/amz-purchases': 'purchase-group',
     '/users': 'system',
     '/brand-owners': 'system',
     '/link-templates': 'system',
@@ -77,7 +76,7 @@ const menuOptions = computed(() => {
         { label: '每日跟价', key: '/daily-price-tracking' },
       ]
   const purchaseChildren = isAmz
-    ? [{ label: 'Amazon 采购管理', key: '/amz-purchases' }]
+    ? []
     : [
         { label: '采购管理', key: '/purchases' },
       ]
@@ -121,7 +120,6 @@ const routeMap = {
   '/link-templates': 'linkTemplates',
   '/operation-logs': 'operationLogs',
   '/amz-replenishment': 'amzReplenishment',
-  '/amz-purchases': 'amzPurchases',
 }
 
 function handleMenuUpdate(key) {

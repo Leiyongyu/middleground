@@ -11,6 +11,7 @@ import { useColumnConfig } from '@/composables/useColumnConfig'
 const message = useMessage()
 
 const loading = ref(false)
+const syncLoading = ref(false)
 const rows = ref([])
 const totalRecords = ref(0)
 const query = reactive({ page: 1, size: 100 })
@@ -237,6 +238,17 @@ onMounted(() => document.addEventListener('click', onDocClick))
 onUnmounted(() => document.removeEventListener('click', onDocClick))
 function onDocClick() { if (showFilter.value) showFilter.value = false }
 
+async function handleSyncAll() {
+  syncLoading.value = true
+  try {
+    const res = await apiPost('/api/sync/amz-refresh-all')
+    message.success('拉取完成：listing=' + (res?.listing||0) + ' profit=' + (res?.profit||0) + ' restock=' + (res?.restock||0) + ' inventory=' + (res?.inventory||0))
+    await loadData()
+  } catch (e) {
+    message.error('拉取失败')
+  } finally { syncLoading.value = false }
+}
+
 async function handleRefresh() {
   loading.value = true
   try {
@@ -295,11 +307,17 @@ async function handleExportExcel() {
         <template #header-extra>
           <NSpace align="center" size="small">
             <NTag size="small" :bordered="false" type="default">共 {{ totalRecords }} 条</NTag>
+            <NButton size="small" secondary :loading="syncLoading" @click="handleSyncAll">
+              <template #icon>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              </template>
+              拉取最新数据
+            </NButton>
             <NButton size="small" secondary :loading="loading" @click="handleRefresh">
               <template #icon>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               </template>
-              刷新
+              刷新快照
             </NButton>
             <NDropdown trigger="click" :options="[{ label: '导出 Excel', key: 'exportExcel' }]" @select="handleDropdownSelect">
               <NButton size="small" type="info" :loading="importExportLoading">导入导出</NButton>
@@ -390,7 +408,11 @@ async function handleExportExcel() {
             <input :value="filterNumInputVal" class="filter-raw-input" style="flex:1" type="number" placeholder="数值" @input="filterNumInputVal = $event.target.value" @keyup.enter="applyFilter()" />
           </div>
           <div v-if="distinctFilterValues.length" class="filter-distinct-list">
-            <div class="filter-distinct-title">{{ filterSearchResults.length ? '搜索结果' : '当前页可选值' }}</div>
+            <div class="filter-distinct-title">{{ filterSearchResults.length ? '搜索结果' : '当前页可选值' }}
+              <NButton size="tiny" text type="primary" style="float:right" @click="filterChecked = (filterChecked.length === distinctFilterValues.length ? [] : [...distinctFilterValues])">
+                {{ filterChecked.length === distinctFilterValues.length ? '取消全选' : '全选' }}
+              </NButton>
+            </div>
             <div v-for="v in distinctFilterValues" :key="v" class="filter-distinct-item">
               <NCheckbox size="small" :checked="filterChecked.includes(v)" @update:checked="toggleFilterCheck(v)" />
               <span @click="toggleFilterCheck(v)" class="filter-item-label">{{ v }}</span>

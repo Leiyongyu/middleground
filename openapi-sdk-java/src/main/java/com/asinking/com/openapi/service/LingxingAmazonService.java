@@ -41,19 +41,84 @@ public class LingxingAmazonService {
     }
 
     /** 全量同步 Amazon Listing */
-    @Transactional
+    /** 测试：拉取指定 sid 的 listing 原始响应，支持搜索条件 */
+    public Object testFetchListing(List<String> sids, String searchField, String searchValue) throws Exception {
+        String accessToken = authService.getAccessToken();
+        Map<String, Object> qp = new LinkedHashMap<>();
+        qp.put("timestamp", String.valueOf(System.currentTimeMillis() / 1000));
+        qp.put("access_token", accessToken);
+        qp.put("app_key", properties.getAppId());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("sid", String.join(",", sids));
+        body.put("is_pair", 1);
+        body.put("is_delete", 0);
+        body.put("offset", 0);
+        body.put("length", 5);
+        if (searchField != null && !searchField.isEmpty()) body.put("search_field", searchField);
+        if (searchValue != null && !searchValue.isEmpty()) {
+            body.put("search_value", JSON.toJSONString(Collections.singletonList(searchValue)));
+        }
+
+        Map<String, Object> sm = new LinkedHashMap<>(qp);
+        sm.putAll(body);
+        qp.put("sign", ApiSign.sign(sm, properties.getAppId()));
+        if (searchValue != null && !searchValue.isEmpty()) {
+            body.put("search_value", Collections.singletonList(searchValue));
+        }
+
+        return HttpExecutor.create().execute(HttpRequest.builder(Object.class)
+                .method(HttpMethod.POST).endpoint(properties.getEndpoint()).path(LISTING_PATH)
+                .queryParams(qp).json(JSON.toJSONString(body))
+                .config(new com.asinking.com.openapi.sdk.core.Config()
+                        .withConnectionTimeout(properties.getConnectTimeout())
+                        .withReadTimeout(properties.getReadTimeout()))
+                .build()).readEntity(Object.class);
+    }
+
     public int syncAllAmzListings(List<String> sids) throws Exception {
         if (sids == null || sids.isEmpty()) return 0;
-        int totalUpserted = 0;
-        int offset = 0;
-        for (int guard = 0; guard < 10000; guard++) {
-            Object remote = requestAmzListing(sids, offset, PAGE_SIZE);
-            int count = upsertListings(remote);
-            totalUpserted += count;
-            if (count < PAGE_SIZE) break;
-            offset += PAGE_SIZE;
+        // 清空全量重建
+        mapper.delete(null);
+        int total = 0;
+        // 每批 20 个 SID，避免一次传太多导致 API 只处理部分
+        int batchSize = 20;
+        for (int i = 0; i < sids.size(); i += batchSize) {
+            List<String> batch = sids.subList(i, Math.min(i + batchSize, sids.size()));
+            int offset = 0;
+            for (int guard = 0; guard < 200; guard++) {
+                Object remote = requestAmzListing(batch, offset, PAGE_SIZE);
+                List<AmzProductListingEntity> list = parseListings(remote);
+                if (list.isEmpty()) break;
+                for (AmzProductListingEntity e : list) mapper.insert(e);
+                total += list.size();
+                if (list.size() < PAGE_SIZE) break;
+                offset += PAGE_SIZE;
+            }
+            if (i + batchSize < sids.size()) {
+                try { Thread.sleep(1000); } catch (InterruptedException ignored) {}
+            }
         }
-        return totalUpserted;
+        return total;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<AmzProductListingEntity> parseListings(Object remote) {
+        Map<String, Object> root = JSON.parseObject(JSON.toJSONString(remote), new TypeReference<Map<String, Object>>() {});
+        List<Map<String, Object>> data = getList(root, "data");
+        if (data.isEmpty()) return Collections.emptyList();
+        List<AmzProductListingEntity> result = new ArrayList<>();
+        for (Map<String, Object> row : data) {
+            Integer sid = getIntObj(row, "sid");
+            String sellerSku = getStr(row, "seller_sku");
+            if (sellerSku.isEmpty() || sid == null) continue;
+            AmzProductListingEntity e = new AmzProductListingEntity();
+            e.setSid(sid);
+            e.setSellerSku(sellerSku);
+            fillFields(e, row);
+            result.add(e);
+        }
+        return result;
     }
 
     private Object requestAmzListing(List<String> sids, int offset, int length) throws Exception {
@@ -87,51 +152,6 @@ public class LingxingAmazonService {
 
         HttpResponse response = HttpExecutor.create().execute(request);
         return response.readEntity(Object.class);
-    }
-
-    private int upsertListings(Object remote) {
-        Map<String, Object> root = JSON.parseObject(
-                JSON.toJSONString(remote),
-                new TypeReference<Map<String, Object>>() {});
-        List<Map<String, Object>> data = getList(root, "data");
-        if (data.isEmpty()) return 0;
-
-        // 加载已有记录按 sid|seller_sku 索引
-        Map<String, AmzProductListingEntity> existing = new LinkedHashMap<>();
-        for (AmzProductListingEntity e : mapper.selectList(null)) {
-            if (StringUtils.hasText(e.getSellerSku())) {
-                existing.put(e.getSid() + "|" + e.getSellerSku(), e);
-            }
-        }
-
-        int count = 0;
-        List<AmzProductListingEntity> toSave = new ArrayList<>();
-        for (Map<String, Object> row : data) {
-            String sellerSku = getStr(row, "seller_sku");
-            Integer sid = getIntObj(row, "sid");
-            if (sellerSku == null || sellerSku.isEmpty() || sid == null) continue;
-
-            String key = sid + "|" + sellerSku;
-            AmzProductListingEntity e = existing.get(key);
-            if (e == null) { e = new AmzProductListingEntity(); e.setSid(sid); e.setSellerSku(sellerSku); }
-            fillFields(e, row);
-            toSave.add(e);
-            if (toSave.size() >= 500) {
-                mapper.updateById(toSave.stream().filter(x -> x.getId() != null).collect(Collectors.toList()));
-                Map<String, AmzProductListingEntity> newBatch = toSave.stream().filter(x -> x.getId() == null).collect(Collectors.toMap(x -> x.getSid() + "|" + x.getSellerSku(), x -> x, (a,b) -> a));
-                // insert new
-                for (AmzProductListingEntity ne : newBatch.values()) mapper.insert(ne);
-                count += toSave.size(); toSave.clear();
-            }
-        }
-        if (!toSave.isEmpty()) {
-            for (AmzProductListingEntity e : toSave) {
-                if (e.getId() != null) mapper.updateById(e);
-                else mapper.insert(e);
-            }
-            count += toSave.size();
-        }
-        return count;
     }
 
     private void fillFields(AmzProductListingEntity e, Map<String, Object> row) {

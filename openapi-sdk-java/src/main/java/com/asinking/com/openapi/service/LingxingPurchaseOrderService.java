@@ -54,6 +54,7 @@ public class LingxingPurchaseOrderService {
 
             for (Map<String, Object> order : data) {
                 String orderSn = str(order.get("order_sn"));
+                if (orderSn.isEmpty()) continue;
                 LocalDateTime createTime = parseDT(str(order.get("create_time")));
                 String key = orderSn + "|" + fmtTime(createTime);
                 List<Map<String, Object>> items = (List<Map<String, Object>>) order.get("item_list");
@@ -61,6 +62,7 @@ public class LingxingPurchaseOrderService {
 
                 PurchaseOrderEntity e = existing.get(key);
                 boolean isNew = (e == null);
+                if (isNew) e = new PurchaseOrderEntity();
                 e.setCustomOrderSn(str(order.get("custom_order_sn")));
                 e.setSupplierId(intVal(order.get("supplier_id")));
                 e.setSupplierName(str(order.get("supplier_name")));

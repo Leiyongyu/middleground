@@ -53,10 +53,12 @@ public class LingxingPurchasePlanQueryService {
             for (Map<String, Object> item : data) {
                 String planSn = str(item.get("plan_sn"));
                 String sku = str(item.get("sku"));
+                if (planSn.isEmpty() || sku.isEmpty()) continue;
                 String key = planSn + "|" + sku;
 
                 PurchasePlanEntity e = existing.get(key);
                 boolean isNew = (e == null);
+                if (isNew) e = new PurchasePlanEntity();
 
                 e.setPpgSn(str(item.get("ppg_sn")));
                 e.setProductName(str(item.get("product_name")));

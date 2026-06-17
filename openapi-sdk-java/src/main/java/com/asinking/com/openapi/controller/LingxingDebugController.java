@@ -14,7 +14,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  */
@@ -100,6 +103,14 @@ public class LingxingDebugController {
     public Object testOrder(@RequestParam(defaultValue = "2026-05-01 00:00:00") String startDate,
                             @RequestParam(defaultValue = "2026-05-25 23:59:59") String endDate) throws Exception {
         return platformOrderService.testFetchOne(startDate, endDate);
+    }
+
+    /** 调试：测试 listing API 返回原始数据 */
+    @GetMapping("/amz-listing-test")
+    public Object testAmzListing(@RequestParam(defaultValue = "") String searchField,
+                                  @RequestParam(defaultValue = "") String searchValue) throws Exception {
+        List<String> sids = shopService.getSidsByPlatform(10001);
+        return amazonService.testFetchListing(sids, searchField, searchValue);
     }
 
 }

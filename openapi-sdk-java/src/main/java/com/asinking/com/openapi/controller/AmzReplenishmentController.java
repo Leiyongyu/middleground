@@ -105,13 +105,13 @@ public class AmzReplenishmentController {
     @GetMapping("/distinct-values")
     public Result<List<String>> distinctValues(@RequestParam String field,
                                                 @RequestParam(defaultValue = "") String keyword) {
-        List<AmzInventoryOverviewEntity> all = mapper.selectList(null);
         String kw = StringUtils.hasText(keyword) ? keyword.trim().toLowerCase() : "";
-        return Result.ok(all.stream()
+        List<String> values = mapper.selectList(null).stream()
                 .map(e -> getFieldValue(e, field))
                 .filter(v -> v != null && !v.isEmpty() && (kw.isEmpty() || v.toLowerCase().contains(kw)))
                 .distinct().sorted().limit(50)
-                .collect(Collectors.toList()));
+                .collect(Collectors.toList());
+        return Result.ok(values);
     }
 
     /** 保存产品分类（独立持久化，刷新不丢失） */

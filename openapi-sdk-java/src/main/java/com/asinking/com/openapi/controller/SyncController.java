@@ -13,6 +13,7 @@ import com.asinking.com.openapi.service.LingxingPurchasePlanQueryService;
 import com.asinking.com.openapi.service.AmzOrderProfitService;
 import com.asinking.com.openapi.service.AmzRestockSummaryService;
 import com.asinking.com.openapi.service.AmzWarehouseInventoryService;
+import com.asinking.com.openapi.service.AmazonComputeService;
 import com.asinking.com.openapi.service.LingxingAmazonService;
 import com.asinking.com.openapi.service.LingxingEbayService;
 import com.asinking.com.openapi.service.LingxingShopService;
@@ -58,6 +59,7 @@ public class SyncController {
     private final AmzOrderProfitService amzProfitService;
     private final AmzRestockSummaryService amzRestockService;
     private final AmzWarehouseInventoryService amzInvService;
+    private final AmazonComputeService amzComputeService;
     private final LingxingShopService ebayShopService;
     private final InventoryOverviewService overviewService;
     private final com.asinking.com.openapi.service.DailyPriceTrackingService trackingService;
@@ -76,6 +78,7 @@ public class SyncController {
                           AmzOrderProfitService amzProfitService,
                           AmzRestockSummaryService amzRestockService,
                           AmzWarehouseInventoryService amzInvService,
+                          AmazonComputeService amzComputeService,
                           GoodcangSyncService goodcangSyncService,
                           GoodcangProductService goodcangProductService,
                           LingxingShopService ebayShopService,                          InventoryOverviewService overviewService,
@@ -94,6 +97,7 @@ public class SyncController {
         this.amzProfitService = amzProfitService;
         this.amzRestockService = amzRestockService;
         this.amzInvService = amzInvService;
+        this.amzComputeService = amzComputeService;
         this.goodcangSyncService = goodcangSyncService;
         this.goodcangProductService = goodcangProductService;
         this.ebayShopService = ebayShopService;        this.overviewService = overviewService;
@@ -116,7 +120,7 @@ public class SyncController {
     /** 一键全量同步：Redis分布式锁防重，认证失败自动跳过后续步骤 */
     @PostMapping("/all")
     public Result<Map<String, Object>> syncAll() throws Exception {
-        RLock lock = redissonClient.getLock("sync:all");
+        RLock lock = redissonClient.getLock("sync:ebay-all");
         if (!lock.tryLock(0, 10, TimeUnit.MINUTES)) {
             return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "同步任务正在执行中，请稍后再试");
         }
@@ -318,8 +322,12 @@ public class SyncController {
     }
 
     /** 同步 Amazon 商品 Listing（精简9字段） */
+    @OperationLog(value = "同步", target = "领星-Amazon商品刊登")
     @PostMapping("/amz-listing")
     public Result<Map<String, Object>> syncAmzListing() throws Exception {
+        RLock lock = redissonClient.getLock("sync:amz-listing");
+        if (!lock.tryLock(0, 30, TimeUnit.MINUTES)) return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "正在同步中，请稍后");
+        try {
         long t = System.currentTimeMillis();
         List<String> sids = ebayShopService.getSidsByPlatform(10001);
         int count = amazonService.syncAllAmzListings(sids);
@@ -327,39 +335,85 @@ public class SyncController {
         data.put("total", count);
         data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
         return Result.ok(data);
+        } finally { if (lock.isHeldByCurrentThread()) lock.unlock(); }
+    }
+
+    /** 一键同步所有 Amazon 数据并重建补货快照（Redis分布式锁防重） */
+    @PostMapping("/amz-refresh-all")
+    public Result<Map<String, Object>> syncAmzRefreshAll() throws Exception {
+        RLock lock = redissonClient.getLock("sync:amz-refresh-all");
+        if (!lock.tryLock(0, 30, TimeUnit.MINUTES)) {
+            return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "Amazon同步任务正在执行中，请稍后再试");
+        }
+        long t = System.currentTimeMillis();
+        Map<String, Object> data = new LinkedHashMap<>();
+        int total = 0;
+
+        try { int n = amazonService.syncAllAmzListings(ebayShopService.getSidsByPlatform(10001)); total += n; data.put("listing", n); log("Amazon商品刊登", n); } catch (Exception e) { log("Amazon商品刊登", e); data.put("listing", "失败"); }
+        try { int n = amzProfitService.syncAll(); total += n; data.put("profit", n); log("Amazon订单利润", n); } catch (Exception e) { log("Amazon订单利润", e); data.put("profit", "失败"); }
+        try { int n = amzRestockService.syncAll(); total += n; data.put("restock", n); log("Amazon补货建议", n); } catch (Exception e) { log("Amazon补货建议", e); data.put("restock", "失败"); }
+        try { int n = amzInvService.syncAll(); total += n; data.put("inventory", n); log("Amazon库存明细", n); } catch (Exception e) { log("Amazon库存明细", e); data.put("inventory", "失败"); }
+        try { amzComputeService.refreshSnapshot(); data.put("snapshot", "ok"); } catch (Exception e) { data.put("snapshot", "失败"); }
+
+        data.put("total", total);
+        data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
+        if (lock.isHeldByCurrentThread()) lock.unlock();
+        return Result.ok(data);
+    }
+
+    private void log(String target, int count) {
+        logService.log("/api/sync/amz-refresh-all", "POST", getCurrentUser(), getClientIp(), "同步", target, "成功", count, count, 0, null, null);
+    }
+    private void log(String target, Exception e) {
+        logService.log("/api/sync/amz-refresh-all", "POST", getCurrentUser(), getClientIp(), "同步", target, "失败", 0, 0, 0, e.getMessage(), null);
     }
 
     /** 同步 Amazon 仓库库存明细 */
+    @OperationLog(value = "同步", target = "领星-Amazon库存明细")
     @PostMapping("/amz-warehouse-inventory")
     public Result<Map<String, Object>> syncAmzWarehouseInventory() throws Exception {
+        RLock lock = redissonClient.getLock("sync:amz-inv");
+        if (!lock.tryLock(0, 30, TimeUnit.MINUTES)) return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "正在同步中，请稍后");
+        try {
         long t = System.currentTimeMillis();
         int count = amzInvService.syncAll();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("total", count);
         data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
         return Result.ok(data);
+        } finally { if (lock.isHeldByCurrentThread()) lock.unlock(); }
     }
 
     /** 同步 Amazon 补货列表汇总（MSKU维度，FBA可售+FBA在途） */
+    @OperationLog(value = "同步", target = "领星-Amazon补货建议")
     @PostMapping("/amz-restock-summary")
     public Result<Map<String, Object>> syncAmzRestockSummary() throws Exception {
+        RLock lock = redissonClient.getLock("sync:amz-restock");
+        if (!lock.tryLock(0, 30, TimeUnit.MINUTES)) return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "正在同步中，请稍后");
+        try {
         long t = System.currentTimeMillis();
         int count = amzRestockService.syncAll();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("total", count);
         data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
         return Result.ok(data);
+        } finally { if (lock.isHeldByCurrentThread()) lock.unlock(); }
     }
 
     /** 同步 Amazon 订单利润数据（MSKU维度，仅5个字段，速度远快于产品表现接口） */
+    @OperationLog(value = "同步", target = "领星-Amazon订单利润")
     @PostMapping("/amz-order-profit")
     public Result<Map<String, Object>> syncAmzOrderProfit() throws Exception {
+        RLock lock = redissonClient.getLock("sync:amz-profit");
+        if (!lock.tryLock(0, 30, TimeUnit.MINUTES)) return Result.fail(com.asinking.com.openapi.common.response.ResultCode.BAD_REQUEST, "正在同步中，请稍后");
+        try {
         long t = System.currentTimeMillis();
         int count = amzProfitService.syncAll();
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("total", count);
         data.put("elapsed", (System.currentTimeMillis() - t) / 1000 + "s");
         return Result.ok(data);
+        } finally { if (lock.isHeldByCurrentThread()) lock.unlock(); }
     }
 
     /** 将键值对交替的参数组装为 Map。 */

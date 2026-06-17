@@ -15,6 +15,12 @@ import com.asinking.com.openapi.service.LingxingWarehouseStatementService;
 import com.asinking.com.openapi.service.InventoryOverviewService;
 import com.asinking.com.openapi.service.OperationLogService;
 import com.asinking.com.openapi.service.DailyPriceTrackingService;
+import com.asinking.com.openapi.service.LingxingAmazonService;
+import com.asinking.com.openapi.service.AmzOrderProfitService;
+import com.asinking.com.openapi.service.AmzRestockSummaryService;
+import com.asinking.com.openapi.service.AmzWarehouseInventoryService;
+import com.asinking.com.openapi.service.AmazonComputeService;
+import com.asinking.com.openapi.service.LingxingShopService;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
@@ -41,6 +47,12 @@ public class ScheduledTasks {
     private final InventoryOverviewService overviewService;
     private final DailyPriceTrackingService trackingService;
     private final GoodcangProductService goodcangProductService;
+    private final LingxingAmazonService amzListingService;
+    private final AmzOrderProfitService amzProfitService;
+    private final AmzRestockSummaryService amzRestockService;
+    private final AmzWarehouseInventoryService amzInvService;
+    private final AmazonComputeService amzComputeService;
+    private final LingxingShopService shopService;
     private final OperationLogService logService;
     private final RateLimitInterceptor rateLimitInterceptor;
     private final RedissonClient redissonClient;
@@ -55,6 +67,12 @@ public class ScheduledTasks {
                           InventoryOverviewService overviewService,
                           DailyPriceTrackingService trackingService,
                           GoodcangProductService goodcangProductService,
+                          LingxingAmazonService amzListingService,
+                          AmzOrderProfitService amzProfitService,
+                          AmzRestockSummaryService amzRestockService,
+                          AmzWarehouseInventoryService amzInvService,
+                          AmazonComputeService amzComputeService,
+                          LingxingShopService shopService,
                           OperationLogService logService,
                           RateLimitInterceptor rateLimitInterceptor,
                           RedissonClient redissonClient) {
@@ -68,12 +86,28 @@ public class ScheduledTasks {
         this.overviewService = overviewService;
         this.trackingService = trackingService;
         this.goodcangProductService = goodcangProductService;
+        this.amzListingService = amzListingService;
+        this.amzProfitService = amzProfitService;
+        this.amzRestockService = amzRestockService;
+        this.amzInvService = amzInvService;
+        this.amzComputeService = amzComputeService;
+        this.shopService = shopService;
         this.logService = logService;
         this.rateLimitInterceptor = rateLimitInterceptor;
         this.redissonClient = redissonClient;
     }
 
-    @Scheduled(cron = "0 3 0 * * ?")
+    // ==== 每周一：低频变动数据 ====
+
+    @Scheduled(cron = "0 0 0 * * 1")
+    public void syncGoodcangWarehouses() { locked("gc-warehouse", () ->
+        step("同步外服", "谷仓-仓库信息", () -> {
+            var r = goodcangSyncService.syncWarehouses();
+            return new int[]{r.getInserted(), 0, 0, r.getInserted()};
+        }));
+    }
+
+    @Scheduled(cron = "0 10 0 * * 1")
     public void syncWarehouse() { locked("warehouse", () ->
         step("同步外服", "领星-仓库信息", () -> {
             WarehouseSyncResponse r = warehouseService.syncOverseaWarehouses(new WarehouseSyncRequest());
@@ -81,15 +115,7 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 5 0 * * ?")
-    public void syncInventory() { locked("inventory", () ->
-        step("同步外服", "领星-库存明细", () -> {
-            WarehouseInventoryDetailSyncResponse r = inventoryService.syncAllInventoryDetails(null);
-            return new int[]{r.getInserted(), 0, 0, r.getInserted()};
-        }));
-    }
-
-    @Scheduled(cron = "0 8 0 * * ?")
+    @Scheduled(cron = "0 20 0 * * 1")
     public void syncEbayItems() { locked("ebay-items", () ->
         step("同步外服", "领星-eBay商品刊登", () -> {
             var r = ebayService.syncAllEbayItems(null);
@@ -98,15 +124,35 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 12 0 * * ?")
-    public void syncGoodcangWarehouses() { locked("gc-warehouse", () ->
-        step("同步外服", "谷仓-仓库信息", () -> {
-            var r = goodcangSyncService.syncWarehouses();
+    @Scheduled(cron = "0 30 0 * * 1")
+    public void syncGoodcangProducts() { locked("gc-products", () ->
+        step("同步外服", "谷仓-商品信息", () -> {
+            Map<String, Object> r = goodcangProductService.syncFromApi();
+            int inserted = ((Number)r.getOrDefault("inserted",0)).intValue();
+            int updated = ((Number)r.getOrDefault("updated",0)).intValue();
+            return new int[]{inserted, updated, 0, ((Number)r.getOrDefault("total",0)).intValue()};
+        }));
+    }
+
+    @Scheduled(cron = "0 40 0 * * 1")
+    public void syncAmzListing() { locked("amz-listing", () ->
+        step("同步外服", "领星-Amazon商品刊登", () -> {
+            int n = amzListingService.syncAllAmzListings(shopService.getSidsByPlatform(10001));
+            return new int[]{n, 0, 0, n};
+        }));
+    }
+
+    // ==== 每天：高频变动数据 (00:50~04:50，间隔约17分钟) ====
+
+    @Scheduled(cron = "0 50 0 * * ?")
+    public void syncInventory() { locked("inventory", () ->
+        step("同步外服", "领星-库存明细", () -> {
+            WarehouseInventoryDetailSyncResponse r = inventoryService.syncAllInventoryDetails(null);
             return new int[]{r.getInserted(), 0, 0, r.getInserted()};
         }));
     }
 
-    @Scheduled(cron = "0 25 0 * * ?")
+    @Scheduled(cron = "0 7 1 * * ?")
     public void syncGoodcangGrn() { locked("gc-grn", () ->
         step("同步外服", "谷仓-入库单", () -> {
             String to = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
@@ -116,7 +162,7 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 28 0 * * ?")
+    @Scheduled(cron = "0 24 1 * * ?")
     public void syncGoodcangGrnDetail() { locked("gc-grn-detail", () ->
         step("同步外服", "谷仓-入库单详情", () -> {
             SaleStatSyncResponse r = goodcangSyncService.syncAllGrnDetails();
@@ -124,7 +170,7 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 30 0 * * ?")
+    @Scheduled(cron = "0 41 1 * * ?")
     public void syncWarehouseStatement() { locked("statement", () ->
         step("同步外服", "领星-库存流水", () -> {
             LocalDate now = LocalDate.now();
@@ -133,7 +179,7 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 35 0 * * ?")
+    @Scheduled(cron = "0 58 1 * * ?")
     public void syncPurchaseOrder() { locked("purchase-order", () ->
         step("同步外服", "领星-采购单", () -> {
             LocalDate now = LocalDate.now();
@@ -142,7 +188,7 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 40 0 * * ?")
+    @Scheduled(cron = "0 15 2 * * ?")
     public void syncPurchasePlan() { locked("purchase-plan", () ->
         step("同步外服", "领星-采购计划", () -> {
             LocalDate now = LocalDate.now();
@@ -151,30 +197,49 @@ public class ScheduledTasks {
         }));
     }
 
-    @Scheduled(cron = "0 45 0 * * ?")
+    @Scheduled(cron = "0 32 2 * * ?")
     public void refreshInventorySnapshot() { locked("refresh-overview", () -> {
         overviewService.refreshSnapshot();
     });}
 
-    @Scheduled(cron = "0 47 0 * * ?")
+    @Scheduled(cron = "0 49 2 * * ?")
     public void refreshTrackingTable() { locked("refresh-tracking", () -> {
         trackingService.refreshTable();
     });}
 
-    @Scheduled(cron = "0 55 0 * * ?")
+    @Scheduled(cron = "0 6 3 * * ?")
+    public void syncAmzProfit() { locked("amz-profit", () ->
+        step("同步外服", "领星-Amazon订单利润", () -> {
+            int n = amzProfitService.syncAll();
+            return new int[]{n, 0, 0, n};
+        }));
+    }
+
+    @Scheduled(cron = "0 23 3 * * ?")
+    public void syncAmzRestock() { locked("amz-restock", () ->
+        step("同步外服", "领星-Amazon补货建议", () -> {
+            int n = amzRestockService.syncAll();
+            return new int[]{n, 0, 0, n};
+        }));
+    }
+
+    @Scheduled(cron = "0 40 3 * * ?")
+    public void syncAmzInventory() { locked("amz-inv", () ->
+        step("同步外服", "领星-Amazon库存明细", () -> {
+            int n = amzInvService.syncAll();
+            return new int[]{n, 0, 0, n};
+        }));
+    }
+
+    @Scheduled(cron = "0 57 3 * * ?")
+    public void refreshAmzSnapshot() { locked("refresh-amz-overview", () -> {
+        amzComputeService.refreshSnapshot();
+    });}
+
+    @Scheduled(cron = "0 14 4 * * ?")
     public void evictRateLimitBuckets() { locked("evict-rate-limit", () -> {
         rateLimitInterceptor.evictStale();
     });}
-
-    @Scheduled(cron = "0 10 0 * * 1")
-    public void syncGoodcangProducts() { locked("gc-products", () ->
-        step("同步外服", "谷仓-商品信息", () -> {
-            Map<String, Object> r = goodcangProductService.syncFromApi();
-            int inserted = ((Number)r.getOrDefault("inserted",0)).intValue();
-            int updated = ((Number)r.getOrDefault("updated",0)).intValue();
-            return new int[]{inserted, updated, 0, ((Number)r.getOrDefault("total",0)).intValue()};
-        }));
-    }
 
     // ==== 辅助 ====
 

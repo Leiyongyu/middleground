@@ -40,13 +40,8 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
         List<String> sids = shopService.getSidsByPlatform(10001);
         if (sids.isEmpty()) { LOG.warn("[amz-restock] 无Amazon店铺"); return 0; }
 
-        // 加载已有记录索引 (key = hash_id)
-        Map<String, Long> existingIds = new LinkedHashMap<>();
-        for (AmzRestockSummaryEntity e : baseMapper.selectList(null)) {
-            if (e.getHashId() != null && !e.getHashId().isEmpty()) {
-                existingIds.put(e.getHashId(), e.getId());
-            }
-        }
+        // 清空全量重建
+        baseMapper.delete(null);
 
         int total = 0;
 
@@ -64,23 +59,8 @@ public class AmzRestockSummaryService extends ServiceImpl<AmzRestockSummaryMappe
                 }
                 if (list.isEmpty()) break;
 
-                // upsert by hash_id：分开 INSERT / UPDATE（saveBatch 才能回填自增ID）
-                List<AmzRestockSummaryEntity> inserts = new ArrayList<>();
-                List<AmzRestockSummaryEntity> updates = new ArrayList<>();
-                for (AmzRestockSummaryEntity e : list) {
-                    Long existId = existingIds.get(e.getHashId());
-                    if (existId != null) { e.setId(existId); updates.add(e); }
-                    else { inserts.add(e); }
-                }
-                if (!inserts.isEmpty()) {
-                    this.saveBatch(inserts);
-                    inserts.forEach(e -> existingIds.put(e.getHashId(), e.getId()));
-                    total += inserts.size();
-                }
-                if (!updates.isEmpty()) {
-                    this.updateBatchById(updates);
-                    total += updates.size();
-                }
+                this.saveBatch(list);
+                total += list.size();
                 if (list.size() < PAGE_SIZE) break;
                 offset += PAGE_SIZE;
             }

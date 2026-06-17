@@ -73,12 +73,6 @@ const router = createRouter({
           component: () => import('@/views/AmzReplenishmentView.vue'),
           meta: { title: 'Amazon 补货' },
         },
-        {
-          path: 'amz-purchases',
-          name: 'amzPurchases',
-          component: () => import('@/views/AmzPurchaseView.vue'),
-          meta: { title: 'Amazon 采购管理' },
-        },
       ],
     },
   ],
